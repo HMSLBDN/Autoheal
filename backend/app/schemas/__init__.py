@@ -14,6 +14,13 @@ from app.schemas.recovery import (
     RecoveryRejectRequest,
     RecoveryTriggerRequest,
 )
+from app.schemas.alert import (
+    AlertAnnotations,
+    AlertItem,
+    AlertLabels,
+    AlertmanagerWebhookPayload,
+    AlertWebhookResponse,
+)
 from app.schemas.analytics import AnalyticsSummaryResponse, AnalyticsHistoryPoint
 from app.schemas.auth import (
     AuthMessageResponse,
@@ -27,6 +34,11 @@ from app.schemas.auth import (
 )
 
 __all__ = [
+    "AlertAnnotations",
+    "AlertItem",
+    "AlertLabels",
+    "AlertmanagerWebhookPayload",
+    "AlertWebhookResponse",
     "AuthMessageResponse",
     "ForgotPasswordRequest",
     "ResetPasswordRequest",

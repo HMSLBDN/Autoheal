@@ -19,6 +19,7 @@ from app.schemas.recovery import (
     RecoveryRejectRequest,
     RecoveryResultResponse,
 )
+from app.services.recovery.executor import RecoveryExecutor
 
 router = APIRouter(prefix="/recoveries", tags=["Recoveries"])
 
@@ -231,3 +232,45 @@ async def reject_recovery(
     await db.flush()
 
     return format_recovery_response(recovery)
+
+
+@router.post(
+    "/{recovery_id}/execute",
+    response_model=RecoveryActionResponse,
+    summary="Execute approved recovery action and verify health",
+)
+async def execute_recovery_endpoint(
+    recovery_id: str,
+    org: OrgDep,
+    current_user: RequireOperatorDep,
+    db: DatabaseDep,
+) -> RecoveryActionResponse:
+    """
+    Triggers controlled execution of an approved recovery action.
+    Runs simulated remediation steps and coordinates post-recovery health verification.
+    """
+    stmt = (
+        select(RecoveryAction)
+        .join(Incident, RecoveryAction.incident_id == Incident.id)
+        .where(
+            RecoveryAction.id == recovery_id,
+            Incident.organization_id == org.id,
+        )
+    )
+    result = await db.execute(stmt)
+    recovery = result.scalar_one_or_none()
+    if not recovery:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Recovery action '{recovery_id}' was not found in this organization.",
+        )
+
+    try:
+        executor = RecoveryExecutor()
+        executed_recovery = await executor.execute_recovery(db, recovery_id=recovery.id)
+        return format_recovery_response(executed_recovery)
+    except ValueError as val_err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(val_err),
+        )

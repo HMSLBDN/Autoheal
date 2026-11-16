@@ -5,11 +5,12 @@ Assembles all sub-routers into /api/v1 router
 
 from fastapi import APIRouter
 
-from app.api.routes import analytics, auth, health, incidents, recoveries, services
+from app.api.routes import alerts, analytics, auth, health, incidents, recoveries, services
 
 api_router = APIRouter()
 
 api_router.include_router(auth.router)
+api_router.include_router(alerts.router)
 api_router.include_router(health.router)
 api_router.include_router(services.router)
 api_router.include_router(incidents.router)

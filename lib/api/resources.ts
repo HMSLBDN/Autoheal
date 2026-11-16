@@ -111,6 +111,9 @@ export const recoveriesApi = {
   async approve(id: string) {
     return validateRecovery(await apiRequest<unknown>(`/api/v1/recoveries/${encodeURIComponent(id)}/approve`, { method: 'POST' }))
   },
+  async execute(id: string) {
+    return validateRecovery(await apiRequest<unknown>(`/api/v1/recoveries/${encodeURIComponent(id)}/execute`, { method: 'POST' }))
+  },
   async reject(id: string, reason?: string) {
     return validateRecovery(await apiRequest<unknown>(`/api/v1/recoveries/${encodeURIComponent(id)}/reject`, {
       method: 'POST',
@@ -123,6 +126,22 @@ export const recoveriesApi = {
 export const analyticsApi = {
   async summary(signal?: AbortSignal) {
     return validateAnalytics(await apiRequest<unknown>('/api/v1/analytics/summary', { signal }))
+  },
+}
+
+export const alertsApi = {
+  async sendWebhook(payload: unknown, secret?: string) {
+    return apiRequest<{ status: string; processed_alerts: number; incidents_created: number; incidents_updated: number; details: string[] }>(
+      '/api/v1/alerts/webhook',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Alertmanager-Secret': secret || 'autoheal_alertmanager_webhook_hmac_secret_key_12345',
+        },
+        body: JSON.stringify(payload),
+      }
+    )
   },
 }
 

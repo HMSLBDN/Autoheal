@@ -130,7 +130,8 @@ class IncidentEvidence(Base):
     id: Mapped[str] = mapped_column(
         String(50),
         primary_key=True,
-    )  # e.g. "ev-1" or UUID
+        default=lambda: f"ev-{uuid.uuid4().hex[:8]}",
+    )
     incident_id: Mapped[str] = mapped_column(
         String(50),
         ForeignKey("incidents.id", ondelete="CASCADE"),
@@ -176,7 +177,8 @@ class IncidentEvent(Base):
     id: Mapped[str] = mapped_column(
         String(50),
         primary_key=True,
-    )  # e.g. "e1" or UUID
+        default=lambda: f"evt-{uuid.uuid4().hex[:8]}",
+    )
     incident_id: Mapped[str] = mapped_column(
         String(50),
         ForeignKey("incidents.id", ondelete="CASCADE"),

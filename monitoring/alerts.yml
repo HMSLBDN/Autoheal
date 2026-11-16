@@ -1,0 +1,66 @@
+# ==============================================================================
+# AutoHeal DevOps — Prometheus Alerting Rules
+# Maps SLO breaches to structured alerts ingested by AutoHeal Webhook
+# ==============================================================================
+groups:
+  - name: autoheal_service_slos
+    rules:
+      # 1. Critical Service Down Alert
+      - alert: ServiceDown
+        expr: up{job=~"checkout-api|customer-web|payments-api"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.service }} is unreachable"
+          description: "Health checks failed: {{ $labels.service }} instance in {{ $labels.environment }} has been offline for more than 30s."
+          probable_cause: "Container crash or port binding failure"
+          recommended_action: "restart_service"
+
+      # 2. Elevated Error Rate Alert
+      - alert: HighErrorRate
+        expr: (rate(http_requests_total{status=~"5.."}[2m]) / rate(http_requests_total[2m])) > 0.015
+        for: 1m
+        labels:
+          severity: high
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.service }}"
+          description: "Error rate exceeded 1.5% threshold: current error rate is {{ $value | humanizePercentage }}."
+          probable_cause: "Upstream gateway timeout or faulty release deployment"
+          recommended_action: "rollback_release"
+
+      # 3. High Latency SLA Breach
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[2m])) > 0.500
+        for: 1m
+        labels:
+          severity: medium
+        annotations:
+          summary: "P95 latency degradation on {{ $labels.service }}"
+          description: "P95 response time is {{ $value | humanizeDuration }}, exceeding 500ms SLA."
+          probable_cause: "Thread exhaustion or database connection pool saturation"
+          recommended_action: "clear_cache"
+
+      # 4. CPU & Thread Saturation Alert
+      - alert: CPUSaturation
+        expr: process_cpu_usage > 0.85
+        for: 2m
+        labels:
+          severity: high
+        annotations:
+          summary: "High CPU utilization on {{ $labels.service }}"
+          description: "CPU utilization has sustained >85% for more than 2 minutes."
+          probable_cause: "Spike in incoming transaction volume"
+          recommended_action: "scale_service"
+
+      # 5. Memory Saturation Alert
+      - alert: MemoryLeakSuspected
+        expr: (process_resident_memory_bytes / 1073741824) > 1.8
+        for: 3m
+        labels:
+          severity: medium
+        annotations:
+          summary: "Memory threshold breach on {{ $labels.service }}"
+          description: "Resident memory exceeded 1.8GB, indicating potential leak or cache bloat."
+          probable_cause: "Unbounded in-memory cache accumulation"
+          recommended_action: "clear_cache"

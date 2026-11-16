@@ -3,6 +3,8 @@ AutoHeal DevOps — API Dependencies & Multi-Tenant Authorization
 Provides cryptographic JWT authentication, organization scoping, and RBAC enforcement.
 """
 
+import hashlib
+import hmac
 from typing import Annotated, Optional, Sequence
 import uuid
 
@@ -178,3 +180,42 @@ OrgDep = Annotated[Organization, Depends(get_current_org)]
 RequireAdminDep = Annotated[User, Depends(RequireRole(["admin"]))]
 RequireOperatorDep = Annotated[User, Depends(RequireRole(["admin", "operator"]))]
 RequireViewerDep = Annotated[User, Depends(RequireRole(["admin", "operator", "viewer"]))]
+
+
+async def verify_alertmanager_webhook(
+    request: Request,
+    x_autoheal_signature: Optional[str] = Header(None, alias="X-AutoHeal-Signature"),
+    x_alertmanager_secret: Optional[str] = Header(None, alias="X-Alertmanager-Secret"),
+    authorization: Optional[str] = Header(None),
+) -> bool:
+    """
+    Validates Alertmanager webhook requests via HMAC-SHA256 signature or shared webhook secret.
+    Fails closed with 401 Unauthorized if credentials do not match.
+    """
+    secret = settings.ALERTMANAGER_HMAC_SECRET.encode("utf-8")
+
+    # 1. Direct secret token verification (X-Alertmanager-Secret or Bearer)
+    if x_alertmanager_secret and hmac.compare_digest(x_alertmanager_secret, settings.ALERTMANAGER_HMAC_SECRET):
+        return True
+
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+        if hmac.compare_digest(token, settings.ALERTMANAGER_HMAC_SECRET):
+            return True
+
+    # 2. HMAC-SHA256 payload signature verification
+    if x_autoheal_signature:
+        sig = x_autoheal_signature.replace("sha256=", "").strip()
+        body = await request.body()
+        expected_sig = hmac.new(secret, body, hashlib.sha256).hexdigest()
+        if hmac.compare_digest(sig, expected_sig):
+            return True
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Unauthorized Alertmanager webhook request: Invalid signature or secret.",
+        headers={"WWW-Authenticate": "HMAC-SHA256"},
+    )
+
+
+WebhookAuthDep = Annotated[bool, Depends(verify_alertmanager_webhook)]
