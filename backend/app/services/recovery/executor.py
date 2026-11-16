@@ -16,6 +16,7 @@ from app.models.audit import AuditLog
 from app.models.incident import Incident, IncidentEvent
 from app.models.recovery import RecoveryAction, RecoveryResult
 from app.models.service import RecoveryPolicy, Service
+from app.services.events import event_broadcaster
 from app.services.recovery.registry import is_action_allowed, get_action_definition
 from app.services.recovery.verifier import PostRecoveryVerifier
 
@@ -172,4 +173,27 @@ class RecoveryExecutor:
             .where(RecoveryAction.id == recovery.id)
         )
         final_res = await db.execute(final_stmt)
-        return final_res.scalar_one()
+        final_action = final_res.scalar_one()
+
+        # Broadcast SSE events for real-time dashboard sync
+        await event_broadcaster.broadcast(incident.organization_id, "recovery_updated", {
+            "id": final_action.id,
+            "status": final_action.status,
+            "verification": final_action.verification,
+            "durationSeconds": final_action.duration_seconds,
+        })
+        await event_broadcaster.broadcast(incident.organization_id, "incident_updated", {
+            "id": incident.id,
+            "status": incident.status,
+            "recoveryStatus": incident.recovery_status,
+        })
+        await event_broadcaster.broadcast(incident.organization_id, "service_health", {
+            "id": service.id,
+            "name": service.name,
+            "status": service.status,
+            "availability": service.availability,
+            "errorRate": service.error_rate,
+            "latencyMs": service.latency_ms,
+        })
+
+        return final_action

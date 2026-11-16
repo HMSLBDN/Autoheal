@@ -99,8 +99,8 @@ export const incidentsApi = {
   async requestRecovery(id: string) {
     return validateRecovery(await apiRequest<unknown>(`/api/v1/incidents/${encodeURIComponent(id)}/recover`, { method: 'POST' }))
   },
-  async downloadReport(id: string, signal?: AbortSignal) {
-    return apiBlob(`/api/v1/incidents/${encodeURIComponent(id)}/report`, signal)
+  async downloadReport(id: string, format: 'pdf' | 'json' = 'pdf', signal?: AbortSignal) {
+    return apiBlob(`/api/v1/incidents/${encodeURIComponent(id)}/report?format=${format}`, signal)
   },
 }
 
@@ -142,6 +142,37 @@ export const alertsApi = {
         body: JSON.stringify(payload),
       }
     )
+  },
+}
+
+export type WorkspaceSettings = {
+  organization: {
+    id: string
+    slug: string
+    name: string
+    plan: string
+    is_active: boolean
+  }
+  user: AuthUser
+  environment: {
+    app_env: string
+    ai_provider: string
+    monitoring_interval_seconds: number
+    max_recovery_retries: number
+    recovery_cooldown_seconds: number
+  }
+}
+
+export const settingsApi = {
+  async get(signal?: AbortSignal): Promise<WorkspaceSettings> {
+    return apiRequest<WorkspaceSettings>('/api/v1/settings', { signal })
+  },
+  async update(payload: { full_name?: string; organization_name?: string }): Promise<WorkspaceSettings> {
+    return apiRequest<WorkspaceSettings>('/api/v1/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
   },
 }
 

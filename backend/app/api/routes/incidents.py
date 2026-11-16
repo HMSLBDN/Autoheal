@@ -2,6 +2,7 @@
 AutoHeal DevOps — Incidents, Evidence & PDF Reports Router
 """
 
+import json
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -19,6 +20,7 @@ from app.schemas.incident import (
     IncidentResponse,
 )
 from app.schemas.recovery import RecoveryActionResponse
+from app.services.events import event_broadcaster
 from app.services.pdf_report import generate_incident_pdf
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
@@ -224,7 +226,8 @@ async def request_recovery(
 
     await db.flush()
 
-    return RecoveryActionResponse(
+    # Broadcast real-time SSE updates
+    recovery_resp = RecoveryActionResponse(
         id=recovery.id,
         incident_id=recovery.incident_id,
         service_name=recovery.service_name,
@@ -237,19 +240,28 @@ async def request_recovery(
         verification=recovery.verification,  # type: ignore[arg-type]
         result=None,
     )
+    await event_broadcaster.broadcast(org.id, "recovery_updated", recovery_resp.model_dump())
+    await event_broadcaster.broadcast(org.id, "incident_updated", {
+        "id": incident.id,
+        "status": incident.status,
+        "recoveryStatus": incident.recovery_status,
+    })
+
+    return recovery_resp
 
 
 @router.get(
     "/{incident_id}/report",
-    summary="Download incident post-mortem PDF report",
+    summary="Download incident post-mortem PDF or JSON report",
 )
 async def download_incident_report(
     incident_id: str,
     org: OrgDep,
     db: DatabaseDep,
+    format: Optional[str] = Query("pdf", description="Report format: pdf or json"),
 ) -> Response:
     """
-    Generates and streams a real ReportLab PDF post-mortem document.
+    Generates and streams a real ReportLab PDF or structured JSON post-mortem document.
     Directly satisfies incidentsApi.downloadReport(id) in lib/api/resources.ts.
     """
     stmt = (
@@ -271,6 +283,63 @@ async def download_incident_report(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Incident '{incident_id}' was not found in this organization.",
+        )
+
+    if format and format.lower() == "json":
+        report_data = {
+            "incident_id": incident.id,
+            "service_id": incident.service_id,
+            "service_name": incident.service_name,
+            "title": incident.title,
+            "severity": incident.severity,
+            "status": incident.status,
+            "detected_at": incident.detected_at.isoformat(),
+            "resolved_at": incident.resolved_at.isoformat() if incident.resolved_at else None,
+            "probable_cause": incident.probable_cause,
+            "recommended_action": incident.recommended_action,
+            "error_rate": incident.error_rate,
+            "threshold": incident.threshold,
+            "evidence": [
+                {
+                    "id": ev.id,
+                    "kind": ev.kind,
+                    "title": ev.title,
+                    "detail": ev.detail,
+                    "timestamp": ev.timestamp.isoformat(),
+                }
+                for ev in incident.evidence
+            ],
+            "timeline": [
+                {
+                    "id": ev.id,
+                    "label": ev.label,
+                    "detail": ev.detail,
+                    "tone": ev.tone,
+                    "timestamp": ev.timestamp.isoformat(),
+                }
+                for ev in incident.events
+            ],
+            "recovery_actions": [
+                {
+                    "id": ra.id,
+                    "action": ra.action,
+                    "status": ra.status,
+                    "verification": ra.verification,
+                    "duration_seconds": ra.duration_seconds,
+                    "requested_by": ra.requested_by,
+                }
+                for ra in incident.recovery_actions
+            ],
+        }
+        json_bytes = json.dumps(report_data, indent=2).encode("utf-8")
+        filename = f"{incident.id}-report.json"
+        return Response(
+            content=json_bytes,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(json_bytes)),
+            },
         )
 
     pdf_bytes = generate_incident_pdf(incident)

@@ -1,10 +1,10 @@
 # AutoHeal DevOps — AI-Assisted Self-Healing Platform
 
-AutoHeal DevOps is a self-healing, AI-assisted platform designed to detect infrastructure regressions, provide automated root cause analysis, propose policy-governed remediation actions, and verify health recovery with human-in-the-loop approval.
+AutoHeal DevOps is an end-to-end self-healing, AI-assisted platform designed to detect infrastructure regressions, provide automated root cause analysis, propose policy-governed remediation actions, and verify health recovery with human-in-the-loop approval.
 
 ---
 
-## 1. System Architecture & Workflow
+## 1. System Architecture & Real-Time Workflow
 
 ```
                                  +-----------------------+
@@ -38,38 +38,70 @@ AutoHeal DevOps is a self-healing, AI-assisted platform designed to detect infra
 |  5. Await Operator Approval (RBAC: operator / admin)           |
 |  6. Controlled Recovery Execution (Simulated Adapter)          |
 |  7. Post-Recovery Health Verification -> Incident Resolved     |
+|  8. Broadcast Real-Time SSE to Organization Subscribers        |
 +--------------------------------+-------------------------------+
                                  ^
                                  | Bearer JWT (15m) + HttpOnly RTR
+                                 | Server-Sent Events (SSE) Stream
                                  v
 +----------------------------------------------------------------+
 |                 Next.js 16 + React 19 Frontend                 |
-|       (Overview, Services, Incidents, Recovery Center, PDF)     |
+|   (Overview, Services, Incidents, Recovery Center, Analytics,  |
+|               Reports [PDF/JSON], Settings)                    |
 +----------------------------------------------------------------+
 ```
 
 ---
 
-## 2. Recovery Lifecycle & Safety Boundary
+## 2. Real-Time Server-Sent Events (SSE) Streaming
 
-AutoHeal DevOps strictly enforces human-in-the-loop policy governance:
+AutoHeal DevOps implements real-time data synchronization via Server-Sent Events (SSE).
 
-1. **Incident Detection**: Prometheus alert or telemetry SLA breach received via Alertmanager webhook.
-2. **AI Diagnosis**: Gemini 1.5 Pro (or deterministic heuristic fallback) analyzes telemetry, error rate, latency, and deployment history to diagnose probable root cause.
-3. **Recovery Recommendation**: AI proposes an action strictly validated against the **Recovery Action Allowlist**.
-4. **Policy Validation**: Verifies cooldowns, maximum retries, and service policies.
-5. **Human Approval**: Operator or Admin reviews diagnosis and explicitly approves or rejects the action via RBAC-protected endpoint.
-6. **Controlled Recovery Execution**: Action executes via an isolated simulation adapter (zero arbitrary shell or Docker socket access).
-7. **Post-Recovery Health Verification**: Real-time probes confirm SLA compliance (error rate < 0.5%, status healthy).
-8. **Resolution or Escalation**: If verified healthy, incident status is marked `resolved`. If verification fails, the incident is escalated to on-call engineers.
+### 2.1 Endpoint Specification
+- **URL**: `GET /api/v1/events/stream`
+- **Authentication**: JWT access token passed via `Authorization: Bearer <token>` or `?token=<jwt_access_token>`.
+- **Tenant Isolation**: Events are strictly scoped to the authenticated caller's `organization_id`.
+- **Keep-Alive**: Emits periodic `: keep-alive\n\n` comments every 15 seconds to prevent reverse proxy and browser timeouts.
+- **Client Auto-Reconnect**: Reconnects with exponential backoff capped at 10 seconds.
 
-> [!IMPORTANT]
-> **Simulated Recovery vs. Real Infrastructure Recovery**:
-> In the current stage, recovery actions execute through safe simulation adapters (`restart_service`, `clear_cache`, `scale_service`, `restore_health`, `rollback_release`). Arbitrary shell commands, `eval`, and Docker socket mounting are strictly blocked to protect host infrastructure. A restricted agent model will be plugged into this executor in future phases.
+### 2.2 Event Types
+| Event Name | Description | Payload |
+| :--- | :--- | :--- |
+| `connected` | Handshake event on connection established | `{"status": "connected", "organization_id": "...", "timestamp": "..."}` |
+| `incident_created` | Alertmanager webhook created a new incident | `{"id": "INC-...", "title": "...", "serviceName": "...", "severity": "...", "status": "open"}` |
+| `incident_updated` | Incident status, diagnosis, or recovery state changed | `{"id": "INC-...", "status": "resolved", "recoveryStatus": "..."}` |
+| `recovery_updated` | Recovery action approved, rejected, or executed | `{"id": "REC-...", "status": "completed", "verification": "passed", "durationSeconds": 35}` |
+| `service_health` | Background telemetry scraper evaluated service SLA | `{"id": "...", "name": "...", "status": "healthy", "availability": 99.98, "errorRate": 0.12, "latencyMs": 142}` |
 
 ---
 
-## 3. Approved Recovery Action Allowlist
+## 3. Frontend-Backend Integration & Architecture
+
+### 3.1 Production vs. Demo Mode Separation
+- **Production Mode**: Active by default when `NEXT_PUBLIC_API_BASE_URL` is set. Never silently falls back to mock data. If the backend is offline, a prominent connection error is presented.
+- **Explicit Demo Mode**: Enabled only when `NEXT_PUBLIC_DEMO_MODE=true` (or when running locally without an API URL). Clearly labeled with `DEMO DATA` indicators.
+
+### 3.2 Secure Authentication & Token Lifecycle
+- **Access Tokens**: Short-lived (15 minutes), passed as `Authorization: Bearer <token>`.
+- **Refresh Token Rotation (RTR)**: Long-lived (7 days), stored exclusively in secure `HttpOnly`, `SameSite=Lax` cookies scoped to `/api/v1/auth`. Never stored in `localStorage` or `sessionStorage`.
+- **RTR Concurrency Lock**: Client-side deduplication guarantees that multiple simultaneous 401s execute only a single token rotation call, preventing race conditions and replay-attack lockouts.
+- **Zero Master-Key Backdoor**: Authentication requires cryptographic JWT verification; internal master secrets cannot be passed as bearer tokens.
+
+### 3.3 Connected Dashboard Views
+1. **Overview Dashboard**: Displays real monitored services, healthy/degraded/down breakdown, active/critical incidents, verified recoveries, and dynamic recovery success rates.
+2. **Monitoring**: Live CPU, memory, request rate, error rate, latency, and SLA availability.
+3. **Services**: Service inventory with health status, metric history, environment filtering, and sorting.
+4. **Incidents**: Correlated evidence, AI root-cause diagnosis, recommended actions, and incident timeline.
+5. **Recovery Center**: Pending approvals, operator approval/rejection controls, simulated execution, and verification states.
+6. **Analytics**: Real database-aggregated reliability trends, MTTR, false-positive rates, and CSV export.
+7. **Reports**: Dual-format downloads for incident post-mortems (ReportLab binary PDF or structured JSON).
+8. **Settings**: Non-sensitive workspace organization configuration, current user profile, and platform governance boundaries.
+
+---
+
+## 4. Recovery Action Allowlist & Safety Boundary
+
+AutoHeal DevOps strictly enforces human-in-the-loop policy governance. Arbitrary shell commands, `eval`, and Docker socket mounting are completely blocked.
 
 | Action Identifier | Display Name | Risk Level | Description |
 | :--- | :--- | :--- | :--- |
@@ -81,9 +113,9 @@ AutoHeal DevOps strictly enforces human-in-the-loop policy governance:
 
 ---
 
-## 4. Environment Variables
+## 5. Environment Configuration
 
-Configure `.env` in the repository root (see [`.env.example`](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/.env.example)):
+Configure `.env` in the repository root:
 
 ```bash
 # Application
@@ -103,31 +135,28 @@ ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
 
 # AI Diagnosis Provider
-AI_PROVIDER=gemini        # 'gemini' or 'none' (heuristic fallback)
+AI_PROVIDER=none          # 'gemini' (requires AI_API_KEY) or 'none' (deterministic heuristic fallback)
 AI_API_KEY=your_gemini_api_key_here
-AI_MODEL=gemini-1.5-pro   # or gemini-1.5-flash
+AI_MODEL=gemini-1.5-pro
 AI_TIMEOUT_SECONDS=8.0
 
 # Monitoring & Alertmanager
 PROMETHEUS_URL=http://localhost:9090
-ALERTMANAGER_HMAC_SECRET=your_alertmanager_webhook_hmac_secret_key_12345
+ALERTMANAGER_HMAC_SECRET=autoheal_alertmanager_webhook_hmac_secret_key_12345
 METRIC_SCRAPE_INTERVAL_SECONDS=15
+MAX_RECOVERY_RETRIES=3
+RECOVERY_COOLDOWN_SECONDS=300
 
 # Frontend
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+NEXT_PUBLIC_DEMO_MODE=false
 ```
 
 ---
 
-## 5. Local Setup & Startup Commands
+## 6. Windows PowerShell Startup Commands
 
-### 5.1 Prerequisites
-- Python 3.12+
-- Node.js 20+ & pnpm
-- Redis (running locally or in Docker on port 6379)
-- PostgreSQL (running locally or in Docker on port 5432)
-
-### 5.2 Backend API Setup
+### 6.1 Backend API Setup
 ```powershell
 # 1. Activate virtual environment
 .\.venv\Scripts\Activate.ps1
@@ -143,9 +172,9 @@ python backend/seed.py
 uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 5.3 Background Worker & Scheduled Monitoring
+### 6.2 Background Worker & Scheduled Monitoring
 ```powershell
-# Start Celery Worker (handles monitoring, AI diagnosis, recovery tasks)
+# Start Celery Worker
 $env:PYTHONPATH="backend"
 celery -A app.worker.celery_app worker --loglevel=info
 
@@ -153,57 +182,45 @@ celery -A app.worker.celery_app worker --loglevel=info
 celery -A app.worker.celery_app beat --loglevel=info
 ```
 
-### 5.4 Prometheus & Alertmanager (Monitoring Pipeline)
-Start Prometheus and Alertmanager with the supplied configurations:
+### 6.3 Prometheus & Alertmanager
 ```powershell
 # Prometheus Server
 prometheus --config.file=monitoring/prometheus.yml
 
-# Alertmanager
+# Alertmanager Server
 alertmanager --config.file=monitoring/alertmanager.yml
 ```
 
-### 5.5 Frontend Development Server
+### 6.4 Frontend Development Server
 ```powershell
 # Install frontend dependencies and start Next.js
 npx pnpm install
 npx pnpm dev
 ```
-
-The frontend dashboard is accessible at `http://localhost:3000`.
-
----
-
-## 6. Alertmanager Webhook Authentication
-
-Alerts can be delivered to `POST /api/v1/alerts/webhook` via either:
-1. **Shared Secret Header**:
-   ```http
-   POST /api/v1/alerts/webhook HTTP/1.1
-   Host: localhost:8000
-   X-Alertmanager-Secret: <ALERTMANAGER_HMAC_SECRET>
-   Content-Type: application/json
-   ```
-2. **HMAC-SHA256 Payload Signature**:
-   ```http
-   POST /api/v1/alerts/webhook HTTP/1.1
-   Host: localhost:8000
-   X-AutoHeal-Signature: sha256=<HMAC_HEX_DIGEST>
-   Content-Type: application/json
-   ```
+Access the dashboard at `http://localhost:3000`.
 
 ---
 
 ## 7. Testing & Verification
 
-Run the full automated test suite (44 tests covering API, Auth, Monitoring, Alerts, AI Diagnosis, and Recovery Engine):
-
+### 7.1 Full Backend Test Suite (56 Tests)
 ```powershell
 $env:PYTHONPATH="backend"
 .venv\Scripts\python.exe -m pytest backend/tests -v
 ```
+All 56 tests pass, covering:
+- AI Diagnosis & Prompt Injection Defense (`test_ai_diagnosis.py`)
+- Alertmanager Ingestion & Deduplication (`test_alerts.py`)
+- Core REST API Endpoints (`test_api.py`)
+- Authentication, RTR, & Replay Attack Protection (`test_auth.py`)
+- Security & Master-Key Bypass Prevention (`test_auth_security.py`)
+- Complete 17-Step End-to-End Workflow (`test_e2e_workflow.py`)
+- Monitoring Collector Telemetry (`test_monitoring.py`)
+- Controlled Recovery Engine & Health Verification (`test_recovery_engine.py`)
+- Workspace Settings Governance (`test_settings.py`)
+- Real-Time Server-Sent Events (SSE) & Tenant Isolation (`test_sse.py`)
 
-Run TypeScript and Next.js production build verification:
+### 7.2 Frontend TypeScript Check & Next.js Production Build
 ```powershell
 npx pnpm exec tsc --noEmit
 npx pnpm run build
@@ -212,6 +229,6 @@ npx pnpm run build
 ---
 
 ## 8. Known Limitations & Future Roadmap
-- **Simulated Execution**: Recovery actions currently operate in deterministic safe simulation mode; real cloud/container agent execution will be introduced with explicit mutual TLS infrastructure daemons.
-- **Single-Cluster Prometheus**: Currently integrates with one primary Prometheus endpoint; federated multi-cluster Prometheus support is planned for multi-region deployments.
-- **Provider Adapters**: Gemini and deterministic heuristic engines are active; Anthropic Claude and OpenAI adapters are stubbed for future expansion.
+- **Simulated Recovery Boundaries**: Recovery execution operates via strict safe simulation adapters. Future phases will integrate restricted mutual-TLS infrastructure agent runners.
+- **SSE Transport**: Server-Sent Events serves as the primary real-time transport. WebSocket upgrades may be introduced if bidirectional low-latency terminal streaming is required.
+- **Multi-Region Prometheus**: Currently integrates with one primary Prometheus endpoint; federated multi-cluster Prometheus support is on the roadmap.

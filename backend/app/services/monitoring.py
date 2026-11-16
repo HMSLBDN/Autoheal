@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.config import get_settings
 from app.models.metric import ServiceMetric
 from app.models.service import Service, ServiceMonitor
+from app.services.events import event_broadcaster
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -198,6 +199,16 @@ class MonitoringService:
                 )
                 db.add(metric_entry)
                 recorded_metrics.append(metric_entry)
+
+                await event_broadcaster.broadcast(svc.organization_id, "service_health", {
+                    "id": svc.id,
+                    "name": svc.name,
+                    "status": svc.status,
+                    "availability": svc.availability,
+                    "errorRate": svc.error_rate,
+                    "latencyMs": svc.latency_ms,
+                    "lastChecked": snapshot.sampled_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
+                })
 
         await db.commit()
         return recorded_metrics

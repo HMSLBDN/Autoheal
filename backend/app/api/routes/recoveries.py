@@ -19,6 +19,7 @@ from app.schemas.recovery import (
     RecoveryRejectRequest,
     RecoveryResultResponse,
 )
+from app.services.events import event_broadcaster
 from app.services.recovery.executor import RecoveryExecutor
 
 router = APIRouter(prefix="/recoveries", tags=["Recoveries"])
@@ -148,7 +149,15 @@ async def approve_recovery(
 
     await db.flush()
 
-    return format_recovery_response(recovery)
+    resp = format_recovery_response(recovery)
+    await event_broadcaster.broadcast(org.id, "recovery_updated", resp.model_dump())
+    if incident:
+        await event_broadcaster.broadcast(org.id, "incident_updated", {
+            "id": incident.id,
+            "recoveryStatus": incident.recovery_status,
+        })
+
+    return resp
 
 
 @router.post(
@@ -231,7 +240,15 @@ async def reject_recovery(
 
     await db.flush()
 
-    return format_recovery_response(recovery)
+    resp = format_recovery_response(recovery)
+    await event_broadcaster.broadcast(org.id, "recovery_updated", resp.model_dump())
+    if incident:
+        await event_broadcaster.broadcast(org.id, "incident_updated", {
+            "id": incident.id,
+            "recoveryStatus": incident.recovery_status,
+        })
+
+    return resp
 
 
 @router.post(
@@ -268,7 +285,9 @@ async def execute_recovery_endpoint(
     try:
         executor = RecoveryExecutor()
         executed_recovery = await executor.execute_recovery(db, recovery_id=recovery.id)
-        return format_recovery_response(executed_recovery)
+        resp = format_recovery_response(executed_recovery)
+        await event_broadcaster.broadcast(org.id, "recovery_updated", resp.model_dump())
+        return resp
     except ValueError as val_err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

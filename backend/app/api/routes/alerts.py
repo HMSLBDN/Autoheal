@@ -17,6 +17,7 @@ from app.models.incident import Incident, IncidentEvent, IncidentEvidence
 from app.models.service import Service
 from app.schemas.alert import AlertmanagerWebhookPayload, AlertWebhookResponse
 from app.services.ai.factory import get_ai_provider
+from app.services.events import event_broadcaster
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +84,12 @@ async def alertmanager_webhook(
         # 2. Look up Service in DB
         svc_stmt = select(Service).where(Service.name == svc_name)
         svc_res = await db.execute(svc_stmt)
-        service = svc_res.scalar_one_or_none()
+        service = svc_res.scalars().first()
 
         if not service:
             # Fallback to first available active service
             fallback_res = await db.execute(select(Service).limit(1))
-            service = fallback_res.scalar_one_or_none()
+            service = fallback_res.scalars().first()
 
         if not service:
             details.append(f"Skipped alert '{alert.labels.alertname}': No provisioned service matching '{svc_name}'.")
@@ -132,6 +133,11 @@ async def alertmanager_webhook(
                 ))
                 incidents_updated += 1
                 details.append(f"Resolved incident '{existing_incident.id}' for service '{service.name}'.")
+                await event_broadcaster.broadcast(service.organization_id, "incident_updated", {
+                    "id": existing_incident.id,
+                    "status": "resolved",
+                    "recoveryStatus": "Resolved by alert resolution",
+                })
             else:
                 details.append(f"Received resolved alert for '{service.name}', but no active incident existed.")
             continue
@@ -152,6 +158,11 @@ async def alertmanager_webhook(
             ))
             incidents_updated += 1
             details.append(f"Deduplicated alert '{alert.labels.alertname}' -> Updated existing incident '{existing_incident.id}'.")
+            await event_broadcaster.broadcast(service.organization_id, "incident_updated", {
+                "id": existing_incident.id,
+                "status": existing_incident.status,
+                "severity": existing_incident.severity,
+            })
 
         else:
             # CREATE NEW INCIDENT
@@ -246,6 +257,13 @@ async def alertmanager_webhook(
 
             incidents_created += 1
             details.append(f"Created incident '{new_incident.id}' with AI recommended action '{new_incident.recommended_action}'.")
+            await event_broadcaster.broadcast(service.organization_id, "incident_created", {
+                "id": new_incident.id,
+                "title": new_incident.title,
+                "serviceName": new_incident.service_name,
+                "severity": new_incident.severity,
+                "status": new_incident.status,
+            })
 
     await db.commit()
 

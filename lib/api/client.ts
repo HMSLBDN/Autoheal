@@ -1,5 +1,10 @@
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') ?? ''
 export const isApiConfigured = API_BASE_URL.length > 0
+export const isDemoModeExplicit = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
+
+// Demo mode is ONLY active when explicitly enabled or when no backend URL is set during local development.
+// Production deployments must connect to a real backend and will never silently substitute mock data.
+export const isDemoMode = isDemoModeExplicit || (!isApiConfigured && process.env.NODE_ENV === 'development')
 
 const TOKEN_KEY = 'autoheal_access_token'
 const USER_KEY = 'autoheal_user'
@@ -61,29 +66,13 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  if (!API_BASE_URL) throw new ApiError('The FastAPI service is not configured.', 0)
+// Refresh Token Rotation (RTR) Lock: Deduplicates concurrent refresh attempts to prevent replay-attack detection
+let activeRefreshPromise: Promise<string | null> | null = null
 
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-    ...(init.headers as Record<string, string> || {}),
-  }
+async function performTokenRefresh(): Promise<string | null> {
+  if (activeRefreshPromise) return activeRefreshPromise
 
-  const token = getAccessToken()
-  if (token && !headers['Authorization']) {
-    headers['Authorization'] = `Bearer ${token}`
-  }
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    cache: 'no-store',
-    credentials: 'include',
-    ...init,
-    headers,
-    signal: init.signal,
-  })
-
-  // Handle 401 token refresh if we have a token and the path is not under /auth/
-  if (response.status === 401 && !path.startsWith('/api/v1/auth/')) {
+  activeRefreshPromise = (async () => {
     try {
       const refreshRes = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
         method: 'POST',
@@ -95,35 +84,103 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
         if (refreshData && refreshData.access_token) {
           setAccessToken(refreshData.access_token)
           if (refreshData.user) setStoredUser(refreshData.user)
-          headers['Authorization'] = `Bearer ${refreshData.access_token}`
-          const retryRes = await fetch(`${API_BASE_URL}${path}`, {
-            cache: 'no-store',
-            credentials: 'include',
-            ...init,
-            headers,
-            signal: init.signal,
-          })
-          const retryBody = await retryRes.json().catch(() => null)
-          if (!retryRes.ok) {
-            const message = retryBody && typeof retryBody === 'object' && 'detail' in retryBody ? String(retryBody.detail) : `Request failed (${retryRes.status})`
-            throw new ApiError(message, retryRes.status)
-          }
-          return retryBody as T
+          return refreshData.access_token as string
         }
-      } else {
-        setAccessToken(null)
-        setStoredUser(null)
       }
+      setAccessToken(null)
+      setStoredUser(null)
+      return null
     } catch {
       setAccessToken(null)
       setStoredUser(null)
+      return null
+    } finally {
+      activeRefreshPromise = null
+    }
+  })()
+
+  return activeRefreshPromise
+}
+
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (!API_BASE_URL) {
+    throw new ApiError('The FastAPI service is not configured. Set NEXT_PUBLIC_API_BASE_URL.', 0)
+  }
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(init.headers as Record<string, string> || {}),
+  }
+
+  const token = getAccessToken()
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
+  // 15-second timeout guard if no custom signal is provided
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
+  let signal = init.signal
+  if (!signal && typeof AbortController !== 'undefined') {
+    const controller = new AbortController()
+    timeoutId = setTimeout(() => controller.abort(), 15000)
+    signal = controller.signal
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      cache: 'no-store',
+      credentials: 'include',
+      ...init,
+      headers,
+      signal,
+    })
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ApiError('Request timed out after 15 seconds.', 408)
+    }
+    throw new ApiError('Could not connect to the AutoHeal backend. Verify server is running.', 0)
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
+  }
+
+  // Handle 401 token refresh with deduplicated RTR lock
+  if (response.status === 401 && !path.startsWith('/api/v1/auth/')) {
+    const newToken = await performTokenRefresh()
+    if (newToken) {
+      headers['Authorization'] = `Bearer ${newToken}`
+      const retryRes = await fetch(`${API_BASE_URL}${path}`, {
+        cache: 'no-store',
+        credentials: 'include',
+        ...init,
+        headers,
+        signal: init.signal,
+      }).catch(() => null)
+
+      if (retryRes && retryRes.ok) {
+        return (await retryRes.json().catch(() => null)) as T
+      }
+      if (retryRes) {
+        const retryBody = await retryRes.json().catch(() => null)
+        const message = retryBody && typeof retryBody === 'object' && 'detail' in retryBody
+          ? String(retryBody.detail)
+          : `Request failed (${retryRes.status})`
+        throw new ApiError(message, retryRes.status)
+      }
     }
   }
 
   const body = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const message = body && typeof body === 'object' && 'detail' in body ? String(body.detail) : `Request failed (${response.status})`
+    let message = `Request failed (${response.status})`
+    if (body && typeof body === 'object') {
+      if ('detail' in body) {
+        message = Array.isArray(body.detail)
+          ? body.detail.map((e: { msg?: string }) => e.msg || String(e)).join(', ')
+          : String(body.detail)
+      }
+    }
     throw new ApiError(message, response.status)
   }
 
@@ -140,15 +197,34 @@ export async function apiBlob(path: string, signal?: AbortSignal): Promise<Blob>
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    cache: 'no-store',
-    credentials: 'include',
-    headers,
-    signal,
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      cache: 'no-store',
+      credentials: 'include',
+      headers,
+      signal,
+    })
+  } catch {
+    throw new ApiError('Could not download file from AutoHeal backend.', 0)
+  }
+
+  if (response.status === 401 && !path.startsWith('/api/v1/auth/')) {
+    const newToken = await performTokenRefresh()
+    if (newToken) {
+      headers['Authorization'] = `Bearer ${newToken}`
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        cache: 'no-store',
+        credentials: 'include',
+        headers,
+        signal,
+      })
+    }
+  }
+
   if (!response.ok) {
     const text = await response.text().catch(() => '')
-    let message = `Request failed (${response.status})`
+    let message = `Download failed (${response.status})`
     try {
       const body = JSON.parse(text) as { detail?: unknown }
       if (body.detail) message = String(body.detail)

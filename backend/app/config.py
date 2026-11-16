@@ -83,6 +83,10 @@ class Settings(BaseSettings):
     ALERTMANAGER_HMAC_SECRET: str = "autoheal_alertmanager_webhook_hmac_secret_key_12345"
     METRIC_SCRAPE_INTERVAL_SECONDS: int = 15
 
+    # Recovery Automation Engine
+    MAX_RECOVERY_RETRIES: int = 3
+    RECOVERY_COOLDOWN_SECONDS: int = 300
+
 
 @lru_cache()
 def get_settings() -> Settings:

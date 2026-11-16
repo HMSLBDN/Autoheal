@@ -7,8 +7,9 @@ import useSWR from 'swr'
 import type { LucideIcon } from 'lucide-react'
 import { Activity, ArrowDownRight, CheckCircle2, Clock3, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { AnalyticsSummary, Incident, RecoveryAction, Service } from '@/types'
-import { isApiConfigured } from '@/lib/api/client'
+import { isApiConfigured, isDemoMode } from '@/lib/api/client'
 import { analyticsApi, healthApi, incidentsApi, recoveriesApi, servicesApi } from '@/lib/api/resources'
+import { useRealtimeEvents } from '@/lib/api/events'
 import { demoAnalytics, demoIncidents, demoRecoveries, demoServices } from '@/lib/demo/mock-data'
 import { useDashboardControls } from '@/components/dashboard/dashboard-shell'
 import { AnalyticsView, IncidentTable, IncidentDetailView, MonitoringView, OverviewView, RecoveryTable, ReportsView, ServiceDetailView, ServiceTable, SettingsView } from '@/components/dashboard/data-views'
@@ -72,12 +73,34 @@ export function DashboardView() {
   const [serviceFilter, setServiceFilter] = useState('all')
   const [incidentRange, setIncidentRange] = useState('all')
 
-  const demoMode = !isApiConfigured
+  const demoMode = isDemoMode
   const servicesResource = useSWR<Service[]>(demoMode ? 'demo-services' : 'services', () => demoMode ? Promise.resolve(demoServices) : servicesApi.list(), { fallbackData: demoMode ? demoServices : undefined, revalidateOnFocus: false })
   const incidentsResource = useSWR<Incident[]>(demoMode ? 'demo-incidents' : 'incidents', () => demoMode ? Promise.resolve(demoIncidents) : incidentsApi.list(), { fallbackData: demoMode ? demoIncidents : undefined, revalidateOnFocus: false })
   const recoveriesResource = useSWR<RecoveryAction[]>(demoMode ? 'demo-recoveries' : 'recoveries', () => demoMode ? Promise.resolve(demoRecoveries) : recoveriesApi.list(), { fallbackData: demoMode ? demoRecoveries : undefined, revalidateOnFocus: false })
   const analyticsResource = useSWR<AnalyticsSummary>(demoMode ? 'demo-analytics' : 'analytics', () => demoMode ? Promise.resolve(demoAnalytics) : analyticsApi.summary(), { fallbackData: demoMode ? demoAnalytics : undefined, revalidateOnFocus: false })
   const healthResource = useSWR<{ status: string }>(demoMode ? 'demo-health' : 'backend-health', () => demoMode ? Promise.resolve({ status: 'demo' }) : healthApi.get(), { fallbackData: demoMode ? { status: 'demo' } : undefined, revalidateOnFocus: false })
+
+  // Real-time Server-Sent Events (SSE) updates
+  useRealtimeEvents({
+    onIncidentCreated: (data) => {
+      setToast(`Alert: ${data.id} created on ${data.serviceName}`)
+      incidentsResource.mutate()
+      analyticsResource.mutate()
+      servicesResource.mutate()
+    },
+    onIncidentUpdated: () => {
+      incidentsResource.mutate()
+      analyticsResource.mutate()
+    },
+    onRecoveryUpdated: () => {
+      recoveriesResource.mutate()
+      incidentsResource.mutate()
+      servicesResource.mutate()
+    },
+    onServiceHealth: () => {
+      servicesResource.mutate()
+    },
+  }, !demoMode)
 
   const parts = pathname.replace(/^\/dashboard\/?/, '').split('/').filter(Boolean)
   const page = parts[0] ?? 'overview'
@@ -165,20 +188,47 @@ export function DashboardView() {
     setDialog({ title: 'Request controlled recovery?', description: `Submit a recovery request for ${incident.serviceName}. The backend validates policy and approval requirements; this request does not mean recovery is complete.`, confirmLabel: 'Submit request', onConfirm: () => performRecoveryRequest(incident.id) })
   }
 
-  async function downloadReport(id: string) {
-    if (demoMode) return
+  async function performExecution(id: string) {
     setBusyId(id)
     try {
-      const blob = await incidentsApi.downloadReport(id)
+      const result = await recoveriesApi.execute(id)
+      await Promise.all([recoveriesResource.mutate(), incidentsResource.mutate(), servicesResource.mutate()])
+      setToast(`Recovery action executed: ${result.action} is ${result.status} (verification: ${result.verification}).`)
+    } catch (error) {
+      setDialog({ title: 'Execution was not completed', description: error instanceof Error ? error.message : 'The backend rejected the recovery execution.' })
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  function beginExecution(id: string) {
+    const action = recoveries.find((item) => item.id === id)
+    if (demoMode) {
+      setDialog({ title: 'Demo actions are read-only', description: 'Connect a backend to execute real recovery actions.' })
+      return
+    }
+    setDialog({
+      title: 'Execute recovery action?',
+      description: `Trigger execution of ${action?.action ?? 'this action'} on ${action?.serviceName ?? 'the selected service'} with automated health verification.`,
+      confirmLabel: 'Execute action',
+      onConfirm: () => performExecution(id),
+    })
+  }
+
+  async function downloadReport(id: string, format: 'pdf' | 'json' = 'pdf') {
+    if (demoMode) return
+    setBusyId(`${id}-${format}`)
+    try {
+      const blob = await incidentsApi.downloadReport(id, format)
       const fileUrl = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = fileUrl
-      anchor.download = `${id}-report.${blob.type.includes('pdf') ? 'pdf' : blob.type.includes('json') ? 'json' : 'bin'}`
+      anchor.download = `${id}-report.${format}`
       document.body.append(anchor)
       anchor.click()
       anchor.remove()
       window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000)
-      setToast(`Report download started for ${id}.`)
+      setToast(`Report download completed for ${id} (${format.toUpperCase()}).`)
     } catch (error) {
       setDialog({ title: 'Report could not be downloaded', description: error instanceof Error ? error.message : 'The backend did not return a report.' })
     } finally {
@@ -213,7 +263,7 @@ export function DashboardView() {
     const running = filteredRecoveries.filter((item) => item.status === 'running').length
     const completed = filteredRecoveries.filter((item) => item.status === 'completed').length
     const failed = filteredRecoveries.filter((item) => item.status === 'failed').length
-    return <>{commonNotices}{heading('Recovery center', 'Review policy-gated operations and verify status returned by the backend.')}<div className="metric-grid metric-grid-five"><MetricCount label="Pending approval" value={String(pending).padStart(2, '0')} note="Requires review" icon={Clock3} /><MetricCount label="Approved" value={String(approved).padStart(2, '0')} note="Awaiting execution" icon={CheckCircle2} /><MetricCount label="Running" value={String(running).padStart(2, '0')} note="Backend-reported" icon={RefreshCw} /><MetricCount label="Completed" value={String(completed).padStart(2, '0')} note="Verification required" icon={ShieldCheck} /><MetricCount label="Failed" value={String(failed).padStart(2, '0')} note="Needs escalation" icon={ArrowDownRight} /></div><section className="dash-card panel" style={{ marginTop: 13 }}><div className="panel-header"><div><h2 className="panel-title">Recovery queue</h2><p className="panel-subtitle">Approval controls require a configured backend. Rejections are unavailable until the API contract adds that endpoint.</p></div></div><RecoveryTable actions={filteredRecoveries} allowControls onApprove={beginApproval} onReject={beginRejection} /></section>{dialogLayer}{toastLayer}</>
+    return <>{commonNotices}{heading('Recovery center', 'Review policy-gated operations and verify status returned by the backend.')}<div className="metric-grid metric-grid-five"><MetricCount label="Pending approval" value={String(pending).padStart(2, '0')} note="Requires review" icon={Clock3} /><MetricCount label="Approved" value={String(approved).padStart(2, '0')} note="Awaiting execution" icon={CheckCircle2} /><MetricCount label="Running" value={String(running).padStart(2, '0')} note="Backend-reported" icon={RefreshCw} /><MetricCount label="Completed" value={String(completed).padStart(2, '0')} note="Verification required" icon={ShieldCheck} /><MetricCount label="Failed" value={String(failed).padStart(2, '0')} note="Needs escalation" icon={ArrowDownRight} /></div><section className="dash-card panel" style={{ marginTop: 13 }}><div className="panel-header"><div><h2 className="panel-title">Recovery queue</h2><p className="panel-subtitle">Review policy-governed actions, approve safe remediations, and trigger automated verification.</p></div></div><RecoveryTable actions={filteredRecoveries} allowControls onApprove={beginApproval} onReject={beginRejection} onExecute={beginExecution} /></section>{dialogLayer}{toastLayer}</>
   }
 
   if (page === 'history') {

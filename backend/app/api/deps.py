@@ -30,61 +30,24 @@ async def get_current_user(
     authorization: Optional[str] = Header(None),
 ) -> User:
     """
-    Authenticates requests via JWT Bearer tokens or verified system master secret.
+    Authenticates requests via cryptographically signed JWT Bearer tokens.
+    Supports both Authorization: Bearer <token> header and ?token=<token> query parameter
+    (required for browser EventSource / SSE connections).
     Fails closed on missing, malformed, expired, or invalid credentials (401 Unauthorized).
     Validates user active status in the database.
     """
-    if not authorization or not authorization.startswith("Bearer "):
+    token: Optional[str] = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    elif "token" in request.query_params:
+        token = request.query_params["token"].strip()
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required to access this resource.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    token = authorization.split(" ", 1)[1].strip()
-
-    # System master secret fallback (for internal automated workers and migrations)
-    if token == settings.SECRET_KEY:
-        # Resolve or seed root admin user
-        stmt = (
-            select(User)
-            .options(selectinload(User.organization))
-            .join(Organization, User.organization_id == Organization.id)
-            .where(Organization.slug == settings.DEFAULT_ORGANIZATION_SLUG)
-            .order_by(User.created_at)
-        )
-        result = await db.execute(stmt)
-        system_user = result.scalars().first()
-        if not system_user:
-            # Query default org
-            org_res = await db.execute(
-                select(Organization).where(Organization.slug == settings.DEFAULT_ORGANIZATION_SLUG)
-            )
-            org = org_res.scalar_one_or_none()
-            if not org:
-                org = Organization(
-                    id=uuid.uuid4(),
-                    slug=settings.DEFAULT_ORGANIZATION_SLUG,
-                    name=settings.DEFAULT_ORGANIZATION_NAME,
-                    plan="enterprise",
-                    is_active=True,
-                )
-                db.add(org)
-                await db.flush()
-
-            system_user = User(
-                id=uuid.uuid4(),
-                organization_id=org.id,
-                email="system@autoheal.local",
-                full_name="AutoHeal System Administrator",
-                hashed_password="[SYSTEM_KEY_MANAGED]",
-                role="admin",
-                is_active=True,
-            )
-            db.add(system_user)
-            await db.commit()
-            await db.refresh(system_user, ["organization"])
-        return system_user
 
     # Decode and validate JWT access token
     payload = decode_access_token(token)
