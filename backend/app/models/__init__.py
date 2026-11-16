@@ -6,6 +6,7 @@ from app.models.base import Base, TimestampMixin, utc_now
 from app.models.organization import Organization
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
+from app.models.password_reset import PasswordReset
 from app.models.service import (
     Service,
     ServiceMonitor,
@@ -32,6 +33,7 @@ __all__ = [
     "Organization",
     "User",
     "RefreshToken",
+    "PasswordReset",
     "Service",
     "ServiceMonitor",
     "AlertConfig",

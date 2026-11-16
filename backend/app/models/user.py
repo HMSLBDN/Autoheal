@@ -12,6 +12,7 @@ from app.models.base import Base, TimestampMixin
 if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.refresh_token import RefreshToken
+    from app.models.password_reset import PasswordReset
     from app.models.recovery import RecoveryAction
     from app.models.audit import AuditLog
 
@@ -65,6 +66,11 @@ class User(Base, TimestampMixin):
     )
     refresh_tokens: Mapped[List["RefreshToken"]] = relationship(
         "RefreshToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    password_resets: Mapped[List["PasswordReset"]] = relationship(
+        "PasswordReset",
         back_populates="user",
         cascade="all, delete-orphan",
     )

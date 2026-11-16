@@ -23,7 +23,7 @@ from sqlalchemy.pool import StaticPool
 # Ensure backend directory is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.api.deps import get_current_org, get_db
+from app.api.deps import get_current_org, get_current_user, get_db
 from app.config import get_settings
 from app.models.base import Base
 from app.main import app
@@ -36,6 +36,7 @@ from app.models import (
     RecoveryResult,
     Service,
     ServiceMetric,
+    User,
 )
 
 settings = get_settings()
@@ -90,6 +91,27 @@ async def seed_data(db_session: AsyncSession):
         is_active=True,
     )
     db_session.add_all([org_a, org_b])
+    await db_session.flush()
+
+    user_a = User(
+        id=uuid.uuid4(),
+        organization_id=org_a.id,
+        email="operator@org-a.com",
+        full_name="Alpha Operator",
+        hashed_password="[TEST_HASH]",
+        role="operator",
+        is_active=True,
+    )
+    user_b = User(
+        id=uuid.uuid4(),
+        organization_id=org_b.id,
+        email="operator@org-b.com",
+        full_name="Beta Operator",
+        hashed_password="[TEST_HASH]",
+        role="operator",
+        is_active=True,
+    )
+    db_session.add_all([user_a, user_b])
     await db_session.flush()
 
     # Services for Org A
@@ -245,6 +267,8 @@ async def seed_data(db_session: AsyncSession):
     return {
         "org_a": org_a,
         "org_b": org_b,
+        "user_a": user_a,
+        "user_b": user_b,
         "svc_a1": svc_a1,
         "svc_a2": svc_a2,
         "svc_b1": svc_b1,
@@ -258,16 +282,21 @@ async def seed_data(db_session: AsyncSession):
 
 @pytest.fixture
 def client(db_session: AsyncSession, seed_data: dict) -> TestClient:
-    """Returns a TestClient scoped by default to Organization Alpha."""
+    """Returns a TestClient scoped by default to Organization Alpha with Operator credentials."""
     org_a = seed_data["org_a"]
+    user_a = seed_data["user_a"]
 
     async def override_get_db():
         yield db_session
+
+    async def override_get_current_user():
+        return user_a
 
     async def override_get_current_org():
         return org_a
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
     app.dependency_overrides[get_current_org] = override_get_current_org
 
     with TestClient(app) as test_client:

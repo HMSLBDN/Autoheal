@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import desc, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import DatabaseDep, OrgDep
+from app.api.deps import DatabaseDep, OrgDep, RequireOperatorDep
 from app.models.audit import AuditLog
 from app.models.incident import Incident
 from app.models.recovery import RecoveryAction
@@ -143,6 +143,7 @@ async def get_incident(
 async def request_recovery(
     incident_id: str,
     org: OrgDep,
+    current_user: RequireOperatorDep,
     db: DatabaseDep,
 ) -> RecoveryActionResponse:
     """
@@ -201,7 +202,7 @@ async def request_recovery(
         action=action_name,
         status="pending_approval",
         approval_required=True,
-        requested_by="AutoHeal policy",
+        requested_by=current_user.email,
         requested_at=datetime.now(timezone.utc),
         verification="pending",
     )
@@ -214,10 +215,11 @@ async def request_recovery(
     # Audit log entry
     db.add(AuditLog(
         organization_id=org.id,
+        user_id=current_user.id,
         action="recovery_requested",
         resource_type="incident",
         resource_id=incident.id,
-        details=f"Created recovery action '{recovery.id}' with operation '{action_name}'.",
+        details=f"Operator '{current_user.email}' requested recovery action '{recovery.id}' with operation '{action_name}'.",
     ))
 
     await db.flush()

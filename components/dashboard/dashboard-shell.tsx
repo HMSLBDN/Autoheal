@@ -2,9 +2,11 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Activity, AlertTriangle, BarChart3, Bell, ChevronDown, Clock3, Command, FileText, Gauge, LayoutDashboard, Menu, Search, Settings2, Workflow, X } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { Activity, AlertTriangle, BarChart3, Bell, ChevronDown, Clock3, Command, FileText, Gauge, LayoutDashboard, LogOut, Menu, Search, Settings2, Workflow, X } from 'lucide-react'
 import { Brand } from '@/components/marketing/brand'
+import { AuthUser, getAccessToken, getStoredUser, isApiConfigured } from '@/lib/api/client'
+import { authApi } from '@/lib/api/resources'
 
 type DashboardControls = { query: string; setQuery: (value: string) => void; environment: string; setEnvironment: (value: string) => void }
 const DashboardContext = createContext<DashboardControls | null>(null)
@@ -27,12 +29,14 @@ const navigation = [
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const [query, setQuery] = useState('')
   const [environment, setEnvironment] = useState('all')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [noticeOpen, setNoticeOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const leaf = pathname === '/dashboard' ? 'Overview' : pathname.split('/')[2]?.replace(/-/g, ' ') ?? 'Overview'
 
   useEffect(() => {
@@ -55,6 +59,27 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [isMobile, sidebarOpen])
 
+  useEffect(() => {
+    const stored = getStoredUser()
+    if (stored) setCurrentUser(stored)
+
+    if (isApiConfigured && getAccessToken()) {
+      authApi.me().then(setCurrentUser).catch(() => {})
+    }
+  }, [])
+
+  async function handleLogout() {
+    setProfileOpen(false)
+    await authApi.logout()
+    router.push('/login')
+  }
+
+  const initials = currentUser?.full_name
+    ? currentUser.full_name.split(' ').map((n) => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
+    : 'AH'
+  const displayName = currentUser?.full_name || 'Demo workspace'
+  const displayRole = currentUser ? `${currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)}` : 'Read-only preview'
+
   return <DashboardContext.Provider value={{ query, setQuery, environment, setEnvironment }}>
     <div className="dashboard-root">
       {isMobile && sidebarOpen && <button className="sidebar-scrim" type="button" aria-label="Close workspace navigation" onClick={() => setSidebarOpen(false)} />}
@@ -72,7 +97,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <nav className="sidebar-nav"><Link className={`sidebar-link${pathname === '/dashboard/settings' ? ' active' : ''}`} href="/dashboard/settings" onClick={() => setSidebarOpen(false)}><Settings2 aria-hidden="true" />Settings</Link></nav>
         <div className="sidebar-bottom">
           <div className="sidebar-help"><strong>Need a hand?</strong><p>Explore the demo or connect your API to see live service data.</p><Link className="feature-more" href="/">Explore platform <ChevronDown size={11} style={{ transform: 'rotate(-90deg)' }} /></Link></div>
-          <div className="profile-row"><div className="avatar" aria-hidden="true">AH</div><div><div className="profile-name">Demo workspace</div><div className="profile-role">Read-only preview</div></div><ChevronDown size={13} style={{ marginLeft: 'auto', color: '#78869a' }} /></div>
+          <div className="profile-row"><div className="avatar" aria-hidden="true">{initials}</div><div><div className="profile-name">{displayName}</div><div className="profile-role">{displayRole}</div></div><ChevronDown size={13} style={{ marginLeft: 'auto', color: '#78869a' }} /></div>
         </div>
       </aside>
       <div className="dashboard-main">
@@ -85,10 +110,24 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <label className="topbar-search"><Search size={13} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workspace" aria-label="Search workspace" /><Command size={12} aria-hidden="true" /></label>
             <label className="sr-only" htmlFor="environment-select">Environment</label><select className="topbar-select" id="environment-select" value={environment} onChange={(event) => setEnvironment(event.target.value)}><option value="all">All environments</option><option value="production">Production</option><option value="staging">Staging</option></select>
             <button className="icon-button" aria-label="Demo notifications" onClick={() => setNoticeOpen(!noticeOpen)} aria-expanded={noticeOpen}><Bell size={14} /></button>
-            <div style={{ position: 'relative' }}><button className="icon-button" aria-label="Open demo profile menu" onClick={() => setProfileOpen(!profileOpen)} aria-expanded={profileOpen}><span className="avatar" style={{ width: 21, height: 21 }}>AH</span></button>{profileOpen && <div className="profile-popover"><strong>Demo workspace</strong><span>Read-only preview</span><Link href="/dashboard/settings" onClick={() => setProfileOpen(false)}>Workspace settings</Link></div>}</div>
+            <div style={{ position: 'relative' }}>
+              <button className="icon-button" aria-label="Open profile menu" onClick={() => setProfileOpen(!profileOpen)} aria-expanded={profileOpen}><span className="avatar" style={{ width: 21, height: 21 }}>{initials}</span></button>
+              {profileOpen && <div className="profile-popover">
+                <strong>{displayName}</strong>
+                <span>{currentUser ? currentUser.email : 'Read-only preview'}</span>
+                <Link href="/dashboard/settings" onClick={() => setProfileOpen(false)}>Workspace settings</Link>
+                {currentUser ? (
+                  <button type="button" onClick={handleLogout} style={{ background: 'none', border: 'none', padding: '6px 0 0', margin: '3px 0 0', borderTop: '1px solid var(--line)', color: '#f87171', fontSize: '9px', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <LogOut size={10} /> Sign out
+                  </button>
+                ) : (
+                  <Link href="/login" onClick={() => setProfileOpen(false)}>Sign in</Link>
+                )}
+              </div>}
+            </div>
           </div>
         </header>
-        {noticeOpen && <div className="notice-strip" style={{ position: 'fixed', top: 70, right: 22, zIndex: 50, width: 290, boxShadow: '0 18px 50px rgba(0,0,0,.4)' }}><strong style={{ color: '#e6edf5' }}>Demo notifications</strong><p style={{ margin: '6px 0 0' }}>Connect a backend to receive real incident alerts and recovery updates.</p></div>}
+        {noticeOpen && <div className="notice-strip" style={{ position: 'fixed', top: 70, right: 22, zIndex: 50, width: 290, boxShadow: '0 18px 50px rgba(0,0,0,.4)' }}><strong style={{ color: '#e6edf5' }}>Notifications</strong><p style={{ margin: '6px 0 0' }}>Connect a backend to receive real incident alerts and recovery updates.</p></div>}
         <main className="dashboard-content">{children}</main>
       </div>
     </div>

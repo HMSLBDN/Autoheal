@@ -15,8 +15,26 @@ from app.schemas.recovery import (
     RecoveryTriggerRequest,
 )
 from app.schemas.analytics import AnalyticsSummaryResponse, AnalyticsHistoryPoint
+from app.schemas.auth import (
+    AuthMessageResponse,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    TokenRefreshRequest,
+    TokenResponse,
+    UserLoginRequest,
+    UserRegisterRequest,
+    UserResponse,
+)
 
 __all__ = [
+    "AuthMessageResponse",
+    "ForgotPasswordRequest",
+    "ResetPasswordRequest",
+    "TokenRefreshRequest",
+    "TokenResponse",
+    "UserLoginRequest",
+    "UserRegisterRequest",
+    "UserResponse",
     "ServiceResponse",
     "ServiceMetricsResponse",
     "MetricPoint",

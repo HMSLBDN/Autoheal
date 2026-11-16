@@ -1,5 +1,5 @@
 import type { AnalyticsSummary, Incident, IncidentEvent, IncidentEvidence, RecoveryAction, Service, ServiceMetrics } from '@/types'
-import { apiBlob, apiRequest, asArray, asObject, ApiError } from './client'
+import { apiBlob, apiRequest, asArray, asObject, ApiError, AuthUser, setAccessToken, setStoredUser } from './client'
 
 function validateService(value: unknown): Service {
   const service = asObject<Service>(value, 'service', {
@@ -123,5 +123,75 @@ export const recoveriesApi = {
 export const analyticsApi = {
   async summary(signal?: AbortSignal) {
     return validateAnalytics(await apiRequest<unknown>('/api/v1/analytics/summary', { signal }))
+  },
+}
+
+export type AuthResponse = {
+  access_token: string
+  token_type: string
+  expires_in: number
+  user: AuthUser
+  refresh_token?: string
+}
+
+export const authApi = {
+  async login(email: string, password: string): Promise<AuthResponse> {
+    const data = await apiRequest<AuthResponse>('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    if (data.access_token) {
+      setAccessToken(data.access_token)
+      if (data.user) setStoredUser(data.user)
+    }
+    return data
+  },
+
+  async register(email: string, password: string, fullName: string): Promise<AuthResponse> {
+    const data = await apiRequest<AuthResponse>('/api/v1/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, full_name: fullName }),
+    })
+    if (data.access_token) {
+      setAccessToken(data.access_token)
+      if (data.user) setStoredUser(data.user)
+    }
+    return data
+  },
+
+  async logout(): Promise<void> {
+    try {
+      await apiRequest<{ message: string }>('/api/v1/auth/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+    } finally {
+      setAccessToken(null)
+      setStoredUser(null)
+    }
+  },
+
+  async me(signal?: AbortSignal): Promise<AuthUser> {
+    const user = await apiRequest<AuthUser>('/api/v1/auth/me', { signal })
+    if (user) setStoredUser(user)
+    return user
+  },
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    return apiRequest<{ message: string }>('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
+    return apiRequest<{ message: string }>('/api/v1/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, new_password: newPassword }),
+    })
   },
 }

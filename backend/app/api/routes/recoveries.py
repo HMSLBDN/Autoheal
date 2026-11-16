@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import desc, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import DatabaseDep, OrgDep
+from app.api.deps import DatabaseDep, OrgDep, RequireOperatorDep
 from app.models.audit import AuditLog
 from app.models.incident import Incident
 from app.models.recovery import RecoveryAction, RecoveryResult
@@ -92,6 +92,7 @@ async def list_recoveries(
 async def approve_recovery(
     recovery_id: str,
     org: OrgDep,
+    current_user: RequireOperatorDep,
     db: DatabaseDep,
 ) -> RecoveryActionResponse:
     """
@@ -126,6 +127,7 @@ async def approve_recovery(
 
     # Update recovery status to approved
     recovery.status = "approved"
+    recovery.approver_id = current_user.id
 
     # Transactionally update associated incident
     inc_res = await db.execute(select(Incident).where(Incident.id == recovery.incident_id))
@@ -136,10 +138,11 @@ async def approve_recovery(
     # Add audit log
     db.add(AuditLog(
         organization_id=org.id,
+        user_id=current_user.id,
         action="recovery_approved",
         resource_type="recovery_action",
         resource_id=recovery.id,
-        details=f"Operator approved recovery action '{recovery.id}' for service '{recovery.service_name}'.",
+        details=f"Operator '{current_user.email}' approved recovery action '{recovery.id}' for service '{recovery.service_name}'.",
     ))
 
     await db.flush()
@@ -155,6 +158,7 @@ async def approve_recovery(
 async def reject_recovery(
     recovery_id: str,
     org: OrgDep,
+    current_user: RequireOperatorDep,
     db: DatabaseDep,
     payload: Optional[RecoveryRejectRequest] = None,
 ) -> RecoveryActionResponse:
@@ -217,10 +221,11 @@ async def reject_recovery(
     # Add audit log
     db.add(AuditLog(
         organization_id=org.id,
+        user_id=current_user.id,
         action="recovery_rejected",
         resource_type="recovery_action",
         resource_id=recovery.id,
-        details=f"Operator rejected action '{recovery.id}'. Reason: {rejection_reason}",
+        details=f"Operator '{current_user.email}' rejected action '{recovery.id}'. Reason: {rejection_reason}",
     ))
 
     await db.flush()

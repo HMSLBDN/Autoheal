@@ -1,65 +1,180 @@
 """
-AutoHeal DevOps — API Dependencies & Multi-Tenant Organization Scoping
+AutoHeal DevOps — API Dependencies & Multi-Tenant Authorization
+Provides cryptographic JWT authentication, organization scoping, and RBAC enforcement.
 """
 
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Sequence
 import uuid
 
 from fastapi import Depends, Header, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
+from app.core.security import decode_access_token
 from app.database import get_db
 from app.models.organization import Organization
+from app.models.user import User
 
 settings = get_settings()
 
 DatabaseDep = Annotated[AsyncSession, Depends(get_db)]
 
 
-async def get_current_org(
+async def get_current_user(
     request: Request,
     db: DatabaseDep,
     authorization: Optional[str] = Header(None),
-) -> Organization:
+) -> User:
     """
-    Resolves the trusted Organization context for multi-tenant data isolation.
-    Fails closed: Any unauthenticated request without a validated trusted credential
-    is rejected with 401 Unauthorized.
-    Client-supplied organization IDs are NEVER accepted as proof of authorization.
+    Authenticates requests via JWT Bearer tokens or verified system master secret.
+    Fails closed on missing, malformed, expired, or invalid credentials (401 Unauthorized).
+    Validates user active status in the database.
     """
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required to access organization resources.",
+            detail="Authentication required to access this resource.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
     token = authorization.split(" ", 1)[1].strip()
 
-    # In Step 3 (prior to full Step 4 User JWT auth flow), support the trusted system/admin secret
-    # or token validation. If invalid, fail closed immediately.
-    if token != settings.SECRET_KEY:
-        # In Step 4 this will decode JWT and look up user's organization_id
+    # System master secret fallback (for internal automated workers and migrations)
+    if token == settings.SECRET_KEY:
+        # Resolve or seed root admin user
+        stmt = (
+            select(User)
+            .options(selectinload(User.organization))
+            .join(Organization, User.organization_id == Organization.id)
+            .where(Organization.slug == settings.DEFAULT_ORGANIZATION_SLUG)
+            .order_by(User.created_at)
+        )
+        result = await db.execute(stmt)
+        system_user = result.scalars().first()
+        if not system_user:
+            # Query default org
+            org_res = await db.execute(
+                select(Organization).where(Organization.slug == settings.DEFAULT_ORGANIZATION_SLUG)
+            )
+            org = org_res.scalar_one_or_none()
+            if not org:
+                org = Organization(
+                    id=uuid.uuid4(),
+                    slug=settings.DEFAULT_ORGANIZATION_SLUG,
+                    name=settings.DEFAULT_ORGANIZATION_NAME,
+                    plan="enterprise",
+                    is_active=True,
+                )
+                db.add(org)
+                await db.flush()
+
+            system_user = User(
+                id=uuid.uuid4(),
+                organization_id=org.id,
+                email="system@autoheal.local",
+                full_name="AutoHeal System Administrator",
+                hashed_password="[SYSTEM_KEY_MANAGED]",
+                role="admin",
+                is_active=True,
+            )
+            db.add(system_user)
+            await db.commit()
+            await db.refresh(system_user, ["organization"])
+        return system_user
+
+    # Decode and validate JWT access token
+    payload = decode_access_token(token)
+    if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired authentication token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Resolve default organization from DB
-    result = await db.execute(
-        select(Organization).where(Organization.slug == settings.DEFAULT_ORGANIZATION_SLUG)
-    )
-    org = result.scalar_one_or_none()
-    if not org:
+    sub = payload.get("sub")
+    if not sub:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Configured organization context is not provisioned in database.",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Malformed token claims.",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
+    try:
+        user_uuid = uuid.UUID(sub)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user identifier format.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    stmt = select(User).options(selectinload(User.organization)).where(User.id == user_uuid)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user no longer exists.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated. Access denied.",
+        )
+
+    return user
+
+
+async def get_current_org(
+    user: Annotated[User, Depends(get_current_user)],
+    db: DatabaseDep,
+) -> Organization:
+    """
+    Derives the cryptographically verified Organization context directly
+    from the authenticated user. Eliminates any possibility of client-supplied
+    tenant tampering.
+    """
+    if user.organization:
+        return user.organization
+
+    result = await db.execute(select(Organization).where(Organization.id == user.organization_id))
+    org = result.scalar_one_or_none()
+    if not org or not org.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization account is suspended or invalid.",
+        )
     return org
 
 
+class RequireRole:
+    """
+    RBAC dependency callable ensuring the authenticated user holds one of the required roles.
+    Fails closed with 403 Forbidden.
+    """
+    def __init__(self, allowed_roles: Sequence[str]):
+        self.allowed_roles = set(allowed_roles)
+
+    async def __call__(
+        self,
+        user: Annotated[User, Depends(get_current_user)],
+    ) -> User:
+        if user.role not in self.allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Insufficient permissions. Required role: {', '.join(sorted(self.allowed_roles))}. Current role: {user.role}.",
+            )
+        return user
+
+
+# Type annotations for route dependencies
+UserDep = Annotated[User, Depends(get_current_user)]
 OrgDep = Annotated[Organization, Depends(get_current_org)]
+RequireAdminDep = Annotated[User, Depends(RequireRole(["admin"]))]
+RequireOperatorDep = Annotated[User, Depends(RequireRole(["admin", "operator"]))]
+RequireViewerDep = Annotated[User, Depends(RequireRole(["admin", "operator", "viewer"]))]
