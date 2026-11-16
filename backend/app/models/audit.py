@@ -5,7 +5,7 @@ AutoHeal DevOps — Security & Operational Audit Log Model
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 import uuid
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text, Uuid
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, utc_now
@@ -22,7 +22,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(
-        BigInteger,
+        BigInteger().with_variant(Integer, "sqlite"),
         primary_key=True,
         autoincrement=True,
     )

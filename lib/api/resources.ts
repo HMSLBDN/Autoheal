@@ -111,6 +111,13 @@ export const recoveriesApi = {
   async approve(id: string) {
     return validateRecovery(await apiRequest<unknown>(`/api/v1/recoveries/${encodeURIComponent(id)}/approve`, { method: 'POST' }))
   },
+  async reject(id: string, reason?: string) {
+    return validateRecovery(await apiRequest<unknown>(`/api/v1/recoveries/${encodeURIComponent(id)}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    }))
+  },
 }
 
 export const analyticsApi = {

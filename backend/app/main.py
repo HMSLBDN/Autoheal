@@ -3,13 +3,12 @@ AutoHeal DevOps — FastAPI Application Entry Point
 """
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 from typing import AsyncGenerator, Dict
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
+from app.api import api_router
 from app.config import get_settings
 
 settings = get_settings()
@@ -45,6 +44,9 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
+# Mount API v1 router registry
+app.include_router(api_router, prefix=settings.API_V1_STR)
+
 
 @app.get(
     "/",
@@ -60,23 +62,4 @@ async def root() -> Dict[str, str]:
         "version": settings.APP_VERSION,
         "status": "operational",
         "docs": "/docs" if settings.DEBUG else "disabled",
-    }
-
-
-@app.get(
-    f"{settings.API_V1_STR}/health",
-    tags=["Health"],
-    summary="Service health probe",
-    status_code=status.HTTP_200_OK,
-)
-async def health_check() -> Dict[str, str]:
-    """
-    Health probe directly consumed by frontend healthApi.get().
-    Contract requires: { "status": str, "timestamp": str }
-    """
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "environment": settings.APP_ENV,
-        "version": settings.APP_VERSION,
     }

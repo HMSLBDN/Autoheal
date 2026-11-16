@@ -122,8 +122,26 @@ export function DashboardView() {
     setDialog({ title: 'Approve recovery action?', description: `This submits approval for ${action?.action ?? 'this action'} on ${action?.serviceName ?? 'the selected service'}. The backend policy remains authoritative.`, confirmLabel: 'Approve action', onConfirm: () => performApproval(id) })
   }
 
-  function beginRejection() {
-    setDialog({ title: 'Rejection endpoint unavailable', description: 'The current backend contract does not include a recovery rejection endpoint. Nothing was sent and the action state was not changed.' })
+  async function performRejection(id: string) {
+    setBusyId(id)
+    try {
+      const result = await recoveriesApi.reject(id)
+      await Promise.all([recoveriesResource.mutate(), incidentsResource.mutate()])
+      setToast(`Recovery action was rejected: ${result.status}.`)
+    } catch (error) {
+      setDialog({ title: 'Rejection was not completed', description: error instanceof Error ? error.message : 'The backend rejected the request.' })
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  function beginRejection(id: string) {
+    const action = recoveries.find((item) => item.id === id)
+    if (demoMode) {
+      setDialog({ title: 'Demo actions are read-only', description: 'No infrastructure operation ran. Connect a backend to reject real recovery controls.' })
+      return
+    }
+    setDialog({ title: 'Reject recovery action?', description: `This records a rejection for ${action?.action ?? 'this action'} on ${action?.serviceName ?? 'the selected service'}. The action will be marked as rejected.`, confirmLabel: 'Reject action', onConfirm: () => performRejection(id) })
   }
 
   async function performRecoveryRequest(id: string) {

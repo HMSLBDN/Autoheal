@@ -1,0 +1,16 @@
+"""
+AutoHeal DevOps — API Router Registry
+Assembles all sub-routers into /api/v1 router
+"""
+
+from fastapi import APIRouter
+
+from app.api.routes import analytics, health, incidents, recoveries, services
+
+api_router = APIRouter()
+
+api_router.include_router(health.router)
+api_router.include_router(services.router)
+api_router.include_router(incidents.router)
+api_router.include_router(recoveries.router)
+api_router.include_router(analytics.router)
