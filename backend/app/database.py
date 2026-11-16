@@ -1,0 +1,80 @@
+"""
+AutoHeal DevOps — Database Connection & Async Session Engine
+"""
+
+from typing import AsyncGenerator
+import logging
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.pool import NullPool, StaticPool
+
+from app.config import get_settings
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+
+def get_engine_args(database_url: str) -> dict:
+    """
+    Returns engine arguments optimized for the target database dialect.
+    """
+    engine_kwargs: dict = {
+        "echo": settings.DEBUG and settings.APP_ENV == "development",
+        "future": True,
+    }
+
+    if database_url.startswith("sqlite"):
+        # SQLite async options (memory or file)
+        engine_kwargs["connect_args"] = {"check_same_thread": False}
+        if ":memory:" in database_url:
+            engine_kwargs["poolclass"] = StaticPool
+        else:
+            engine_kwargs["poolclass"] = NullPool
+    else:
+        # PostgreSQL (asyncpg) pool configuration
+        engine_kwargs.update({
+            "pool_pre_ping": True,
+            "pool_size": 10,
+            "max_overflow": 20,
+            "pool_recycle": 1800,
+            "pool_timeout": 30,
+        })
+
+    return engine_kwargs
+
+
+# Create AsyncEngine singleton
+engine: AsyncEngine = create_async_engine(
+    settings.DATABASE_URL,
+    **get_engine_args(settings.DATABASE_URL),
+)
+
+# Async session factory
+async_session_factory = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
+)
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """
+    FastAPI dependency that yields an async database session per request.
+    Handles commit on success, automatic rollback on error, and session closure.
+    """
+    async with async_session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            logger.error("Database session rolled back due to error: %s", exc)
+            raise
+        finally:
+            await session.close()

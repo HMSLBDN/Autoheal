@@ -1,7 +1,7 @@
 export type ServiceStatus = 'healthy' | 'degraded' | 'critical'
 export type Severity = 'critical' | 'high' | 'medium' | 'low'
 export type IncidentStatus = 'open' | 'investigating' | 'recovering' | 'resolved'
-export type RecoveryStatus = 'pending_approval' | 'approved' | 'running' | 'completed' | 'failed'
+export type RecoveryStatus = 'pending_approval' | 'approved' | 'running' | 'completed' | 'failed' | 'rejected'
 
 export interface Service {
   id: string

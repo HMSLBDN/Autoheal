@@ -55,7 +55,7 @@ function validateRecovery(value: unknown): RecoveryAction {
     strings: ['id', 'incidentId', 'serviceName', 'action', 'status', 'requestedBy', 'requestedAt', 'verification'],
     booleans: ['approvalRequired'],
   })
-  if (!['pending_approval', 'approved', 'running', 'completed', 'failed'].includes(action.status)) throw new ApiError('The recovery response contains an unsupported status.', 502)
+  if (!['pending_approval', 'approved', 'running', 'completed', 'failed', 'rejected'].includes(action.status)) throw new ApiError('The recovery response contains an unsupported status.', 502)
   if (!['pending', 'passed', 'failed', 'not_started'].includes(action.verification)) throw new ApiError('The recovery response contains an unsupported verification state.', 502)
   if (action.durationSeconds !== undefined && (typeof action.durationSeconds !== 'number' || !Number.isFinite(action.durationSeconds))) throw new ApiError('The recovery response contains an invalid duration.', 502)
   return action

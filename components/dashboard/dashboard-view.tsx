@@ -199,7 +199,7 @@ export function DashboardView() {
   }
 
   if (page === 'history') {
-    const history = filteredRecoveries.filter((item) => item.status === 'completed' || item.status === 'failed')
+    const history = filteredRecoveries.filter((item) => item.status === 'completed' || item.status === 'failed' || item.status === 'rejected')
     return <>{commonNotices}{heading('Recovery history', 'Review completed and failed actions, timing, result, and verification state.', <span className="demo-label">{history.length} records</span>)}<section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Recorded operations</h2><p className="panel-subtitle">An action is only successful when the backend confirms completion and verification.</p></div></div><RecoveryTable actions={history} /></section>{dialogLayer}{toastLayer}</>
   }
 
