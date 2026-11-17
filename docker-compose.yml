@@ -1,0 +1,244 @@
+name: autoheal-devops
+
+services:
+  # ----------------------------------------------------------------------------
+  # Next.js Frontend (Production Runner)
+  # ----------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: autoheal-frontend:latest
+    container_name: autoheal_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # FastAPI Backend API Server
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: autoheal-backend:latest
+    container_name: autoheal_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-autoheal_user}:${POSTGRES_PASSWORD:-autoheal_secure_pass}@db:5432/${POSTGRES_DB:-autoheal_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_secure_pass}@redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-autoheal_super_secret_jwt_key_min_32_chars_prod}
+      - ALERTMANAGER_WEBHOOK_SECRET=${ALERTMANAGER_WEBHOOK_SECRET:-autoheal_alertmanager_hmac_secret_key_32chars}
+      - PROMETHEUS_URL=http://prometheus:9090
+      - ALERTMANAGER_URL=http://alertmanager:9093
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # Celery Background Worker
+  # ----------------------------------------------------------------------------
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery_worker
+    image: autoheal-celery-worker:latest
+    container_name: autoheal_celery_worker
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-autoheal_user}:${POSTGRES_PASSWORD:-autoheal_secure_pass}@db:5432/${POSTGRES_DB:-autoheal_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_secure_pass}@redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-autoheal_super_secret_jwt_key_min_32_chars_prod}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - PROMETHEUS_URL=http://prometheus:9090
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # Celery Beat Scheduler
+  # ----------------------------------------------------------------------------
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery_beat
+    image: autoheal-celery-beat:latest
+    container_name: autoheal_celery_beat
+    restart: unless-stopped
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-autoheal_user}:${POSTGRES_PASSWORD:-autoheal_secure_pass}@db:5432/${POSTGRES_DB:-autoheal_db}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_secure_pass}@redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-autoheal_super_secret_jwt_key_min_32_chars_prod}
+    depends_on:
+      redis:
+        condition: service_healthy
+      celery_worker:
+        condition: service_started
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # PostgreSQL Database (No public host ports in production)
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: autoheal_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-autoheal_db}
+      - POSTGRES_USER=${POSTGRES_USER:-autoheal_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-autoheal_secure_pass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-autoheal_user} -d ${POSTGRES_DB:-autoheal_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # Redis Queue & Cache (No public host ports in production)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: autoheal_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-redis_secure_pass}"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-redis_secure_pass}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # Prometheus Metrics Collector
+  # ----------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: autoheal_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - promdata:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # Prometheus Alertmanager
+  # ----------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: autoheal_alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertdata:/alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # Grafana Dashboards
+  # ----------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: autoheal_grafana
+    restart: unless-stopped
+    volumes:
+      - grafanadata:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin_secure_pass}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3001:3000"
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # Host Node Metrics Exporter
+  # ----------------------------------------------------------------------------
+  node_exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: autoheal_node_exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
+    networks:
+      - autoheal_network
+
+  # ----------------------------------------------------------------------------
+  # Container Metrics & Resource Monitoring
+  # ----------------------------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: autoheal_cadvisor
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8081:8080"
+    networks:
+      - autoheal_network
+
+volumes:
+  pgdata:
+  redisdata:
+  promdata:
+  alertdata:
+  grafanadata:
+
+networks:
+  autoheal_network:
+    driver: bridge

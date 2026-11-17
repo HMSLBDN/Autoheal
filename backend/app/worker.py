@@ -9,7 +9,7 @@ import logging
 import os
 from typing import Any, Dict
 
-from celery import Celery
+from celery import Celery, signals
 from celery.schedules import crontab
 
 from app.config import get_settings
@@ -42,13 +42,37 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    task_time_limit=120,          # Hard task limit
-    task_soft_time_limit=90,      # Soft task limit
-    task_acks_late=True,          # Acknowledge after task finishes for resilience
-    worker_prefetch_multiplier=1, # Fair dispatching
+    task_time_limit=180,                   # Hard task limit (3 minutes)
+    task_soft_time_limit=120,              # Soft task limit (2 minutes)
+    task_acks_late=True,                   # Acknowledge after task finishes for resilience
+    task_reject_on_worker_lost=True,       # Re-queue tasks if worker process unexpectedly dies
+    broker_connection_retry_on_startup=True, # Resilient connection retry on boot
+    worker_prefetch_multiplier=1,          # Fair dispatching, prevent worker starvation
     task_default_retry_delay=5,
     task_max_retries=3,
 )
+
+
+@signals.task_failure.connect
+def on_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **extra):
+    """
+    Dead-letter logging for tasks that encounter unhandled exceptions or exhaust retry limits.
+    """
+    logger.error(
+        "[CELERY_DEAD_LETTER] Task %s (ID: %s) failed with exception: %s. Args: %s",
+        getattr(sender, "name", "unknown_task"),
+        task_id,
+        exception,
+        args,
+    )
+
+
+@signals.worker_shutting_down.connect
+def on_worker_shutdown(sig=None, how=None, exitcode=None, **extra):
+    """
+    Graceful shutdown logging when worker receives SIGTERM or SIGINT.
+    """
+    logger.info("[CELERY_WORKER_SHUTDOWN] Worker gracefully completing in-flight tasks and draining queue (signal=%s, code=%s)", sig, exitcode)
 
 # Scheduled Periodic Monitoring Jobs (Celery Beat)
 celery_app.conf.beat_schedule = {

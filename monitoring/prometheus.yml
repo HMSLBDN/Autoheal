@@ -59,3 +59,13 @@ scrape_configs:
         replacement: "payments-api"
       - target_label: environment
         replacement: "production"
+
+  # 4. Host Node Metrics
+  - job_name: "node-exporter"
+    static_configs:
+      - targets: ["node_exporter:9100"]
+
+  # 5. Container Resource Metrics
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]

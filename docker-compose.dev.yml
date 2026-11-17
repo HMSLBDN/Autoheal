@@ -1,0 +1,225 @@
+name: autoheal-devops-dev
+
+services:
+  # ----------------------------------------------------------------------------
+  # FastAPI Backend (Development with Hot-Reload)
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: autoheal-backend:dev
+    container_name: autoheal_backend_dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://autoheal_user:autoheal_dev_pass@db:5432/autoheal_db
+      - REDIS_URL=redis://:redis_dev_pass@redis:6379/0
+      - SECRET_KEY=autoheal_development_secret_key_min_32_characters_long_12345
+      - ALERTMANAGER_WEBHOOK_SECRET=autoheal_development_alertmanager_secret_key_32chars
+      - PROMETHEUS_URL=http://prometheus:9090
+      - ALERTMANAGER_URL=http://alertmanager:9093
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # Celery Background Worker (Development)
+  # ----------------------------------------------------------------------------
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery_worker
+    image: autoheal-celery-worker:dev
+    container_name: autoheal_celery_worker_dev
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://autoheal_user:autoheal_dev_pass@db:5432/autoheal_db
+      - REDIS_URL=redis://:redis_dev_pass@redis:6379/0
+      - SECRET_KEY=autoheal_development_secret_key_min_32_characters_long_12345
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - PROMETHEUS_URL=http://prometheus:9090
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # Celery Beat Scheduler (Development)
+  # ----------------------------------------------------------------------------
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.celery_beat
+    image: autoheal-celery-beat:dev
+    container_name: autoheal_celery_beat_dev
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+    environment:
+      - ENVIRONMENT=development
+      - DATABASE_URL=postgresql+asyncpg://autoheal_user:autoheal_dev_pass@db:5432/autoheal_db
+      - REDIS_URL=redis://:redis_dev_pass@redis:6379/0
+      - SECRET_KEY=autoheal_development_secret_key_min_32_characters_long_12345
+    depends_on:
+      redis:
+        condition: service_healthy
+      celery_worker:
+        condition: service_started
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # PostgreSQL Database (Exposed to host for local dev debugging)
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: autoheal_db_dev
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=autoheal_db
+      - POSTGRES_USER=autoheal_user
+      - POSTGRES_PASSWORD=autoheal_dev_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U autoheal_user -d autoheal_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # Redis Queue & Cache (Exposed to host for local dev inspection)
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: autoheal_redis_dev
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "no", "--requirepass", "redis_dev_pass"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_dev_pass", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 3s
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # Prometheus Metrics Collector (Development)
+  # ----------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: autoheal_prometheus_dev
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - promdata_dev:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # Prometheus Alertmanager (Development)
+  # ----------------------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: autoheal_alertmanager_dev
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertdata_dev:/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # Grafana Dashboards (Development)
+  # ----------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: autoheal_grafana_dev
+    restart: unless-stopped
+    volumes:
+      - grafanadata_dev:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3001:3000"
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # Host Node Metrics Exporter (Development)
+  # ----------------------------------------------------------------------------
+  node_exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: autoheal_node_exporter_dev
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # Container Metrics & Resource Monitoring (Development)
+  # ----------------------------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: autoheal_cadvisor_dev
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8081:8080"
+    networks:
+      - autoheal_dev_network
+
+volumes:
+  pgdata_dev:
+  redisdata_dev:
+  promdata_dev:
+  alertdata_dev:
+  grafanadata_dev:
+
+networks:
+  autoheal_dev_network:
+    driver: bridge

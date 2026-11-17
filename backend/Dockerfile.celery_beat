@@ -1,0 +1,51 @@
+# ==========================================
+# AutoHeal DevOps - Celery Beat Scheduler Dockerfile
+# Multi-stage production build (Python 3.12-slim)
+# Non-root user: autoheal (UID 10001)
+# ==========================================
+
+# Stage 1: Build wheels
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip wheel --no-cache-dir --wheel-dir /build/wheels -r requirements.txt
+
+# Stage 2: Final runtime container
+FROM python:3.12-slim AS runner
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/home/autoheal/.local/bin:$PATH"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -g 10001 autoheal && \
+    useradd -u 10001 -g autoheal -s /bin/bash -m autoheal
+
+COPY --from=builder /build/wheels /wheels
+COPY --from=builder /build/requirements.txt /wheels/requirements.txt
+RUN pip install --no-cache-dir --no-index --find-links=/wheels -r /wheels/requirements.txt && \
+    rm -rf /wheels
+
+COPY --chown=autoheal:autoheal . /app
+
+USER autoheal
+
+CMD ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]

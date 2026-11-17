@@ -6,7 +6,9 @@ import asyncio
 import logging
 from typing import Dict, Any
 
+from sqlalchemy import select
 from app.database import async_session_factory
+from app.models.recovery import RecoveryAction
 from app.services.recovery.executor import RecoveryExecutor
 from app.worker import celery_app
 
@@ -15,6 +17,21 @@ logger = logging.getLogger(__name__)
 
 async def _run_recovery(recovery_id: str, simulated_healthy: bool = True) -> Dict[str, Any]:
     async with async_session_factory() as session:
+        # Idempotency check: if already completed or verified, return early without re-executing
+        stmt = select(RecoveryAction).where(RecoveryAction.id == recovery_id)
+        res = await session.execute(stmt)
+        existing = res.scalar_one_or_none()
+        if existing and existing.status in ("completed", "verified"):
+            logger.info("Idempotent task execution: Recovery %s already in state '%s'.", recovery_id, existing.status)
+            return {
+                "status": "already_completed",
+                "recovery_id": existing.id,
+                "action": existing.action,
+                "recovery_status": existing.status,
+                "verification": existing.verification,
+                "summary": "Action already completed in a prior task execution.",
+            }
+
         executor = RecoveryExecutor()
         recovery = await executor.execute_recovery(
             db=session,

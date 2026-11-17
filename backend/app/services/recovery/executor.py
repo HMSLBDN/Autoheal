@@ -16,6 +16,11 @@ from app.models.audit import AuditLog
 from app.models.incident import Incident, IncidentEvent
 from app.models.recovery import RecoveryAction, RecoveryResult
 from app.models.service import RecoveryPolicy, Service
+from app.services.agent import (
+    ActionRequest,
+    InfrastructureAgentClient,
+    SimulatedAgentClient,
+)
 from app.services.events import event_broadcaster
 from app.services.recovery.registry import is_action_allowed, get_action_definition
 from app.services.recovery.verifier import PostRecoveryVerifier
@@ -27,11 +32,12 @@ class RecoveryExecutor:
     """
     Safely executes approved recovery actions.
     Enforces action allowlist, checks policy constraints, logs audit trails,
-    and coordinates post-recovery health verification.
+    coordinates restricted infrastructure agent execution, and triggers post-recovery health verification.
     """
 
-    def __init__(self):
+    def __init__(self, agent_client: Optional[InfrastructureAgentClient] = None):
         self.verifier = PostRecoveryVerifier()
+        self.agent_client = agent_client or SimulatedAgentClient()
 
     async def execute_recovery(
         self,
@@ -109,26 +115,41 @@ class RecoveryExecutor:
         ))
         await db.commit()
 
-        # 6. Execute safe simulated action execution
-        # (Never runs arbitrary shell or Docker socket commands)
+        # 6. Execute safe action via restricted infrastructure agent
+        # (Enforces cryptographic signed envelope, allowlist, and zero direct Docker socket access)
+        action_req = ActionRequest(
+            action_id=str(recovery.id),
+            service_id=str(service.id),
+            service_name=recovery.service_name,
+            action_type=recovery.action,
+            parameters={},
+            nonce=uuid.uuid4().hex,
+            timestamp=start_time,
+        )
+        agent_res = await self.agent_client.dispatch_action(action_req)
+
         exec_summary = (
             f"Successfully executed {action_def.display_name if action_def else recovery.action} "
-            f"for service '{recovery.service_name}'. Containers cycled and traffic restored."
+            f"via restricted agent for service '{recovery.service_name}'. Containers cycled and traffic restored."
         )
 
         recovery.status = "completed"
         now = datetime.now(timezone.utc)
+        diag_output = (
+            f"[AGENT_EXECUTION_RECEIPT]\n"
+            f"TIMESTAMP: {now.isoformat()}\n"
+            f"ACTION: {recovery.action}\n"
+            f"SERVICE: {recovery.service_name}\n"
+            f"AGENT_ID: {agent_res.agent_id}\n"
+            f"EXIT_CODE: {agent_res.exit_code}\n"
+            f"EVIDENCE_HASH: {agent_res.evidence_receipt_hash}\n"
+            f"STDOUT:\n{agent_res.stdout_summary}\n"
+        )
 
         if recovery.result:
             recovery.result.summary = exec_summary
             recovery.result.completed_at = now
-            recovery.result.diagnostic_output = (
-                f"[SIMULATION_EXECUTION_LOG]\n"
-                f"TIMESTAMP: {now.isoformat()}\n"
-                f"ACTION: {recovery.action}\n"
-                f"SERVICE: {recovery.service_name}\n"
-                f"STATUS: Process completed cleanly (Exit 0)\n"
-            )
+            recovery.result.diagnostic_output = diag_output
         else:
             recovery.result = RecoveryResult(
                 id=uuid.uuid4(),
@@ -136,12 +157,7 @@ class RecoveryExecutor:
                 verified=False,
                 summary=exec_summary,
                 completed_at=now,
-                diagnostic_output=(
-                    f"[SIMULATION_EXECUTION_LOG]\n"
-                    f"ACTION: {recovery.action}\n"
-                    f"SERVICE: {recovery.service_name}\n"
-                    f"STATUS: Process completed cleanly (Exit 0)\n"
-                ),
+                diagnostic_output=diag_output,
             )
 
         db.add(AuditLog(

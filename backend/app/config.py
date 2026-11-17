@@ -56,6 +56,10 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://autoheal_user:autoheal_dev_password@localhost:5432/autoheal_db",
         description="Async PostgreSQL connection URI"
     )
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
 
     # Redis Broker & Cache
     REDIS_URL: str = Field(
@@ -67,6 +71,8 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    SSE_TICKET_EXPIRE_SECONDS: int = 60
+    AGENT_SECRET_KEY: str = "autoheal_agent_secret_key_32chars_long"
 
     # Default Multi-Tenant Organization
     DEFAULT_ORGANIZATION_NAME: str = "AutoHeal Workspace"

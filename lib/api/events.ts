@@ -30,7 +30,7 @@ export function useRealtimeEvents(handlers: RealtimeHandlers, enabled = true) {
     let retryDelay = 1000
     let isDisposed = false
 
-    function connect() {
+    async function connect() {
       if (isDisposed) return
 
       const token = getAccessToken()
@@ -40,7 +40,30 @@ export function useRealtimeEvents(handlers: RealtimeHandlers, enabled = true) {
         return
       }
 
-      const streamUrl = `${API_BASE_URL}/api/v1/events/stream?token=${encodeURIComponent(token)}`
+      let streamUrl = `${API_BASE_URL}/api/v1/events/stream?token=${encodeURIComponent(token)}`
+
+      // Hardened SSE authentication: request short-lived single-use ticket to prevent JWT leakage in access logs
+      try {
+        const ticketRes = await fetch(`${API_BASE_URL}/api/v1/events/ticket`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+        })
+        if (ticketRes.ok) {
+          const ticketData = await ticketRes.json()
+          if (ticketData?.ticket) {
+            streamUrl = `${API_BASE_URL}/api/v1/events/stream?ticket=${encodeURIComponent(ticketData.ticket)}`
+          }
+        }
+      } catch {
+        // Fall back to direct stream connection
+      }
+
+      if (isDisposed) return
+
       try {
         eventSource = new EventSource(streamUrl, { withCredentials: true })
 

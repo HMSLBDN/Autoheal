@@ -18,6 +18,7 @@ from app.core.security import decode_access_token
 from app.database import get_db
 from app.models.organization import Organization
 from app.models.user import User
+from app.services.ticket import sse_ticket_service
 
 settings = get_settings()
 
@@ -30,41 +31,58 @@ async def get_current_user(
     authorization: Optional[str] = Header(None),
 ) -> User:
     """
-    Authenticates requests via cryptographically signed JWT Bearer tokens.
-    Supports both Authorization: Bearer <token> header and ?token=<token> query parameter
-    (required for browser EventSource / SSE connections).
+    Authenticates requests via cryptographically signed JWT Bearer tokens or single-use SSE tickets.
+    Supports:
+      1. Single-use short-lived SSE ticket: ?ticket=<ticket> (hardened, burns upon connection)
+      2. Authorization: Bearer <token> header
+      3. Legacy query param ?token=<token> (fallback)
     Fails closed on missing, malformed, expired, or invalid credentials (401 Unauthorized).
     Validates user active status in the database.
     """
     token: Optional[str] = None
-    if authorization and authorization.startswith("Bearer "):
+    ticket_user_id: Optional[str] = None
+
+    if "ticket" in request.query_params:
+        ticket_val = request.query_params["ticket"].strip()
+        ticket_data = sse_ticket_service.consume_ticket(ticket_val)
+        if not ticket_data:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid, expired, or already consumed event ticket.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        ticket_user_id = ticket_data.get("user_id")
+    elif authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ", 1)[1].strip()
     elif "token" in request.query_params:
         token = request.query_params["token"].strip()
 
-    if not token:
+    if not ticket_user_id and not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required to access this resource.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Decode and validate JWT access token
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired authentication token.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if ticket_user_id:
+        sub = ticket_user_id
+    else:
+        # Decode and validate JWT access token
+        payload = decode_access_token(token)
+        if not payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired authentication token.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
-    sub = payload.get("sub")
-    if not sub:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Malformed token claims.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        sub = payload.get("sub")
+        if not sub:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Malformed token claims.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     try:
         user_uuid = uuid.UUID(sub)

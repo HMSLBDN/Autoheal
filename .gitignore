@@ -41,3 +41,7 @@ htmlcov/
 *.sqlite
 *.sqlite3
 *.db
+backups/
+*.sql.gz
+*.sqlite.gz
+*.sha256

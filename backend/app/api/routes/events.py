@@ -4,15 +4,42 @@ Streams live incident, recovery, and service health updates to authenticated cli
 """
 
 import logging
+from typing import Any, Dict
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import OrgDep, UserDep
 from app.services.events import event_broadcaster
+from app.services.ticket import sse_ticket_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/events", tags=["Real-Time Events"])
+
+
+@router.post(
+    "/ticket",
+    summary="Issue single-use, short-lived SSE connection ticket",
+    response_model=Dict[str, Any],
+)
+async def create_event_ticket(
+    org: OrgDep,
+    current_user: UserDep,
+) -> Dict[str, Any]:
+    """
+    Issues a cryptographically secure, single-use ticket valid for 60 seconds.
+    The frontend exchanges its Bearer token for this ticket before establishing an EventSource connection.
+    Eliminates exposure of long-lived access tokens in URL query strings and proxy logs.
+    """
+    ticket, expires_in = sse_ticket_service.issue_ticket(
+        user_id=str(current_user.id),
+        org_id=str(org.id),
+    )
+    return {
+        "ticket": ticket,
+        "expires_in": expires_in,
+        "token_type": "ticket",
+    }
 
 
 @router.get(

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import api_router
 from app.config import get_settings
+from app.core.logging import RequestTracingMiddleware
 
 settings = get_settings()
 
@@ -33,6 +34,9 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.DEBUG else None,
     lifespan=lifespan,
 )
+
+# Add Request Tracing correlation middleware
+app.add_middleware(RequestTracingMiddleware)
 
 # Configure Cross-Origin Resource Sharing (CORS)
 app.add_middleware(

@@ -38,10 +38,10 @@ def get_engine_args(database_url: str) -> dict:
         # PostgreSQL (asyncpg) pool configuration
         engine_kwargs.update({
             "pool_pre_ping": True,
-            "pool_size": 10,
-            "max_overflow": 20,
-            "pool_recycle": 1800,
-            "pool_timeout": 30,
+            "pool_size": settings.DB_POOL_SIZE,
+            "max_overflow": settings.DB_MAX_OVERFLOW,
+            "pool_recycle": settings.DB_POOL_RECYCLE,
+            "pool_timeout": settings.DB_POOL_TIMEOUT,
         })
 
     return engine_kwargs
