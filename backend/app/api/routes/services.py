@@ -19,7 +19,11 @@ router = APIRouter(prefix="/services", tags=["Services"])
 def format_service_response(svc: Service) -> ServiceResponse:
     """Formats DB model into schema matching frontend Service interface."""
     # Determine human/relative lastChecked string for frontend compatibility
-    diff_sec = int((datetime.now(timezone.utc) - svc.last_checked).total_seconds())
+    last_checked = svc.last_checked
+    if last_checked.tzinfo is None:
+        last_checked = last_checked.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    diff_sec = int((now - last_checked).total_seconds())
     if diff_sec < 60:
         last_checked_str = f"{max(diff_sec, 1)} sec ago"
     elif diff_sec < 3600:
