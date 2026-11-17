@@ -68,11 +68,25 @@ RECOVERY_ACTION_REGISTRY: Dict[str, RecoveryActionDefinition] = {
 APPROVED_RECOVERY_ACTIONS = set(RECOVERY_ACTION_REGISTRY.keys())
 
 
+def normalize_action(action: str) -> Optional[str]:
+    """Normalizes an action identifier or display name to its canonical registry key."""
+    if not action:
+        return None
+    act_lower = action.lower().strip()
+    if act_lower in RECOVERY_ACTION_REGISTRY:
+        return act_lower
+    for k, v in RECOVERY_ACTION_REGISTRY.items():
+        if k == act_lower or v.display_name.lower() == act_lower or k == act_lower.replace(" ", "_"):
+            return k
+    return None
+
+
 def is_action_allowed(action: str) -> bool:
     """Verifies that an action identifier exists in the approved allowlist."""
-    return action in RECOVERY_ACTION_REGISTRY
+    return normalize_action(action) is not None
 
 
 def get_action_definition(action: str) -> Optional[RecoveryActionDefinition]:
     """Retrieves metadata definition for an allowlist action."""
-    return RECOVERY_ACTION_REGISTRY.get(action)
+    key = normalize_action(action)
+    return RECOVERY_ACTION_REGISTRY.get(key) if key else None

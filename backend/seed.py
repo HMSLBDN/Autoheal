@@ -99,10 +99,11 @@ async def seed_services(session: AsyncSession, org: Organization) -> None:
     """Seeds baseline infrastructure services matching frontend demo inventory."""
     services_data = [
         {"id": "svc-api", "name": "checkout-api", "environment": "production", "status": "healthy", "availability": 99.98, "error_rate": 0.12, "latency_ms": 142},
-        {"id": "svc-web", "name": "customer-web", "environment": "production", "status": "degraded", "availability": 99.72, "error_rate": 1.84, "latency_ms": 684},
+        {"id": "svc-web", "name": "customer-web", "environment": "staging", "status": "healthy", "availability": 99.95, "error_rate": 0.08, "latency_ms": 85},
+        {"id": "svc-payments", "name": "payments-api", "environment": "production", "status": "healthy", "availability": 99.99, "error_rate": 0.04, "latency_ms": 65},
         {"id": "svc-worker", "name": "event-worker", "environment": "production", "status": "healthy", "availability": 99.95, "error_rate": 0.08, "latency_ms": 86},
         {"id": "svc-pg", "name": "primary-postgres", "environment": "production", "status": "healthy", "availability": 99.99, "error_rate": 0.01, "latency_ms": 21},
-        {"id": "svc-search", "name": "search-indexer", "environment": "staging", "status": "critical", "availability": 96.21, "error_rate": 5.40, "latency_ms": 1208},
+        {"id": "svc-search", "name": "search-indexer", "environment": "staging", "status": "healthy", "availability": 99.90, "error_rate": 0.10, "latency_ms": 110},
     ]
 
     for item in services_data:

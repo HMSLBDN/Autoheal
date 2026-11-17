@@ -2,6 +2,7 @@
 AutoHeal DevOps — Database Connection & Async Session Engine
 """
 
+from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 import logging
 from sqlalchemy.ext.asyncio import (
@@ -78,3 +79,28 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
+
+
+@asynccontextmanager
+async def get_isolated_task_session() -> AsyncGenerator[AsyncSession, None]:
+    """
+    Creates an isolated AsyncSession with NullPool and explicitly disposes the engine on exit.
+    Specifically designed for background Celery tasks running in ephemeral event loops.
+    """
+    task_engine = create_async_engine(
+        settings.DATABASE_URL,
+        poolclass=NullPool,
+        echo=False,
+    )
+    task_session_factory = async_sessionmaker(
+        bind=task_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+    try:
+        async with task_session_factory() as session:
+            yield session
+    finally:
+        await task_engine.dispose()

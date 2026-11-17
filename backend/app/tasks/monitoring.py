@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Dict, Any
 
-from app.database import async_session_factory
+from app.database import async_session_factory, engine
 from app.services.monitoring import MonitoringService
 from app.worker import celery_app
 
@@ -36,6 +36,10 @@ def monitor_services_task(self) -> Dict[str, Any]:
         try:
             return loop.run_until_complete(_run_monitoring())
         finally:
+            try:
+                loop.run_until_complete(engine.dispose())
+            except Exception:
+                pass
             loop.close()
     except Exception as exc:
         logger.error("Monitoring task failed: %s. Retrying...", exc)

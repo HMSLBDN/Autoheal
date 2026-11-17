@@ -12,7 +12,7 @@ services:
     container_name: autoheal_backend_dev
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./backend:/app
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
@@ -21,6 +21,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://autoheal_user:autoheal_dev_pass@db:5432/autoheal_db
       - REDIS_URL=redis://:redis_dev_pass@redis:6379/0
       - SECRET_KEY=autoheal_development_secret_key_min_32_characters_long_12345
+      - ALERTMANAGER_HMAC_SECRET=autoheal_alertmanager_webhook_hmac_secret_key_12345
       - ALERTMANAGER_WEBHOOK_SECRET=autoheal_development_alertmanager_secret_key_32chars
       - PROMETHEUS_URL=http://prometheus:9090
       - ALERTMANAGER_URL=http://alertmanager:9093
@@ -99,7 +100,7 @@ services:
       - POSTGRES_USER=autoheal_user
       - POSTGRES_PASSWORD=autoheal_dev_pass
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata_dev:/var/lib/postgresql/data
     healthcheck:
@@ -112,7 +113,7 @@ services:
       - autoheal_dev_network
 
   # ----------------------------------------------------------------------------
-  # Redis Queue & Cache (Exposed to host for local dev inspection)
+  # Redis Queue & Cache (Bound strictly to localhost for secure dev inspection)
   # ----------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
@@ -120,7 +121,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "no", "--requirepass", "redis_dev_pass"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redisdata_dev:/data
     healthcheck:
@@ -144,7 +145,7 @@ services:
       - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - promdata_dev:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     networks:
       - autoheal_dev_network
 
@@ -159,7 +160,7 @@ services:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertdata_dev:/alertmanager
     ports:
-      - "9093:9093"
+      - "127.0.0.1:9093:9093"
     networks:
       - autoheal_dev_network
 
@@ -177,7 +178,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     networks:
       - autoheal_dev_network
 
@@ -193,7 +194,7 @@ services:
     container_name: autoheal_node_exporter_dev
     restart: unless-stopped
     ports:
-      - "9100:9100"
+      - "127.0.0.1:9100:9100"
     networks:
       - autoheal_dev_network
 
@@ -211,7 +212,52 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8085:8080"
+    networks:
+      - autoheal_dev_network
+
+  # ----------------------------------------------------------------------------
+  # Realistic Monitoring Test Microservices
+  # ----------------------------------------------------------------------------
+  checkout-api:
+    build:
+      context: ./monitoring/test_services
+      dockerfile: Dockerfile
+    image: autoheal-test-service:dev
+    container_name: autoheal_test_checkout_api
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=checkout-api
+      - SERVICE_PORT=8080
+      - SERVICE_ENV=production
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - autoheal_dev_network
+
+  customer-web:
+    image: autoheal-test-service:dev
+    container_name: autoheal_test_customer_web
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=customer-web
+      - SERVICE_PORT=8081
+      - SERVICE_ENV=staging
+    ports:
+      - "127.0.0.1:8081:8081"
+    networks:
+      - autoheal_dev_network
+
+  payments-api:
+    image: autoheal-test-service:dev
+    container_name: autoheal_test_payments_api
+    restart: unless-stopped
+    environment:
+      - SERVICE_NAME=payments-api
+      - SERVICE_PORT=8082
+      - SERVICE_ENV=production
+    ports:
+      - "127.0.0.1:8082:8082"
     networks:
       - autoheal_dev_network
 

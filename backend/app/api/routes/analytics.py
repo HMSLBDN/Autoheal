@@ -18,6 +18,11 @@ router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
 @router.get(
+    "",
+    response_model=AnalyticsSummaryResponse,
+    include_in_schema=False,
+)
+@router.get(
     "/summary",
     response_model=AnalyticsSummaryResponse,
     summary="Get analytics reliability & recovery summary",

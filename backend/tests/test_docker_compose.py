@@ -55,6 +55,19 @@ def test_docker_compose_development_structure():
     assert "db" in services
     assert "redis" in services
     assert "backend" in services
+    assert "checkout-api" in services
+    assert "customer-web" in services
+    assert "payments-api" in services
+
+    # Security check: All published development ports must explicitly bind to localhost (127.0.0.1)
+    for svc_name, svc_conf in services.items():
+        ports = svc_conf.get("ports", [])
+        for port in ports:
+            port_str = port if isinstance(port, str) else str(port)
+            assert port_str.startswith("127.0.0.1:"), (
+                f"Security violation in dev compose: Service '{svc_name}' port '{port_str}' "
+                f"must bind explicitly to '127.0.0.1' to prevent external network exposure!"
+            )
 
 
 def test_dockerfiles_exist_and_non_root():

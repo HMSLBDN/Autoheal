@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any
 
 from sqlalchemy import select
-from app.database import async_session_factory
+from app.database import async_session_factory, engine
 from app.models.recovery import RecoveryAction
 from app.services.recovery.executor import RecoveryExecutor
 from app.worker import celery_app
@@ -59,6 +59,10 @@ def execute_recovery_task(self, recovery_id: str, simulated_healthy: bool = True
         try:
             return loop.run_until_complete(_run_recovery(recovery_id, simulated_healthy))
         finally:
+            try:
+                loop.run_until_complete(engine.dispose())
+            except Exception:
+                pass
             loop.close()
     except Exception as exc:
         logger.error("Recovery execution task failed for '%s': %s", recovery_id, exc)
