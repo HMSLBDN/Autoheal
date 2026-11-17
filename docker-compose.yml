@@ -49,7 +49,9 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - autoheal_network
+      autoheal_network:
+        aliases:
+          - autoheal-api
 
   # ----------------------------------------------------------------------------
   # Celery Background Worker
