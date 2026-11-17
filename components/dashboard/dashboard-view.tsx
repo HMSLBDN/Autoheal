@@ -106,9 +106,9 @@ export function DashboardView() {
   const page = parts[0] ?? 'overview'
   const detailId = parts[1] ? decodeURIComponent(parts[1]) : ''
   const incidentDetailResource = useSWR<Incident>(!demoMode && page === 'incidents' && detailId ? ['incident', detailId] : null, () => incidentsApi.get(detailId), { revalidateOnFocus: false })
-  const services = servicesResource.data ?? []
-  const incidents = incidentsResource.data ?? []
-  const recoveries = recoveriesResource.data ?? []
+  const services = useMemo(() => servicesResource.data ?? [], [servicesResource.data])
+  const incidents = useMemo(() => incidentsResource.data ?? [], [incidentsResource.data])
+  const recoveries = useMemo(() => recoveriesResource.data ?? [], [recoveriesResource.data])
   const analytics = analyticsResource.data
   const apiErrors = [servicesResource.error, incidentsResource.error, recoveriesResource.error, analyticsResource.error, healthResource.error, incidentDetailResource.error].filter(Boolean)
   const loading = !demoMode && [servicesResource, incidentsResource, recoveriesResource, analyticsResource, healthResource].some((resource) => resource.isLoading)

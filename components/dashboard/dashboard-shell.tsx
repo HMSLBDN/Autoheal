@@ -36,7 +36,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const [isMobile, setIsMobile] = useState(false)
   const [noticeOpen, setNoticeOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => getStoredUser())
   const leaf = pathname === '/dashboard' ? 'Overview' : pathname.split('/')[2]?.replace(/-/g, ' ') ?? 'Overview'
 
   useEffect(() => {
@@ -60,9 +60,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, [isMobile, sidebarOpen])
 
   useEffect(() => {
-    const stored = getStoredUser()
-    if (stored) setCurrentUser(stored)
-
     if (isApiConfigured && getAccessToken()) {
       authApi.me().then(setCurrentUser).catch(() => {})
     }

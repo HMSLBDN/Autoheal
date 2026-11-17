@@ -28,14 +28,18 @@ function ServiceStatus({ status }: { status: Service['status'] }) {
 
 export function OverviewView({ services, incidents, recoveries, analytics, demoMode, loading, onRefresh }: { services: Service[]; incidents: Incident[]; recoveries: RecoveryAction[]; analytics?: AnalyticsSummary; demoMode: boolean; loading: boolean; onRefresh: () => void }) {
   const [range, setRange] = useState('7d')
-  const inRange = useMemo(() => incidents.filter((incident) => {
-    if (range === 'all') return true
-    const text = incident.detectedAt.toLowerCase()
-    const timestamp = Date.parse(incident.detectedAt)
-    const age = Date.now() - timestamp
-    if (range === '24h') return text.includes('today') || (!Number.isNaN(timestamp) && age >= 0 && age <= 86_400_000)
-    return text.includes('today') || text.includes('yesterday') || Number.isNaN(timestamp) || (age >= 0 && age <= 604_800_000)
-  }), [incidents, range])
+  const inRange = useMemo(() => {
+    // eslint-disable-next-line react-hooks/purity
+    const currentTime = Date.now()
+    return incidents.filter((incident) => {
+      if (range === 'all') return true
+      const text = incident.detectedAt.toLowerCase()
+      const timestamp = Date.parse(incident.detectedAt)
+      const age = currentTime - timestamp
+      if (range === '24h') return text.includes('today') || (!Number.isNaN(timestamp) && age >= 0 && age <= 86_400_000)
+      return text.includes('today') || text.includes('yesterday') || Number.isNaN(timestamp) || (age >= 0 && age <= 604_800_000)
+    })
+  }, [incidents, range])
   const healthy = services.filter((item) => item.status === 'healthy').length
   const degraded = services.filter((item) => item.status === 'degraded').length
   const down = services.filter((item) => item.status === 'critical').length

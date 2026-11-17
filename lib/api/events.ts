@@ -20,7 +20,10 @@ export interface RealtimeHandlers {
  */
 export function useRealtimeEvents(handlers: RealtimeHandlers, enabled = true) {
   const handlersRef = useRef(handlers)
-  handlersRef.current = handlers
+
+  useEffect(() => {
+    handlersRef.current = handlers
+  }, [handlers])
 
   useEffect(() => {
     if (!enabled || !isApiConfigured || typeof window === 'undefined') return
