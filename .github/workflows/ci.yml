@@ -1,6 +1,6 @@
 name: AutoHeal DevOps CI
 
-on:
+'on':
   push:
     branches: [main]
   pull_request:
@@ -45,10 +45,11 @@ jobs:
 
       - name: Run Pytest test suite
         env:
-          ENVIRONMENT: test
-          SECRET_KEY: test_secret_key_minimum_32_characters_long_12345
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
-          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: "test"
+          SECRET_KEY: "test_secret_key_minimum_32_characters_long_12345"
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+          REDIS_URL: "redis://localhost:6379/0"
+          PYTHONPATH: "backend"
         run: |
           pytest backend/tests -v --durations=10
 
@@ -63,15 +64,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-
-      - name: Enable Corepack & pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@latest --activate
+          cache: "pnpm"
 
       - name: Install dependencies
         run: |
@@ -146,10 +148,15 @@ jobs:
           echo "Checking repository for prohibited secret files..."
           FOUND_SECRETS=0
           for file in $(git ls-files | grep -E '\.env($|\.)|\.pem$|\.key$|id_rsa'); do
-            if [ "$file" != ".env.example" ]; then
-              echo "SECURITY ERROR: Forbidden sensitive file committed: $file"
-              FOUND_SECRETS=1
-            fi
+            case "$file" in
+              *.example|.env.example|*/.env.example)
+                continue
+                ;;
+              *)
+                echo "SECURITY ERROR: Forbidden sensitive file committed: $file"
+                FOUND_SECRETS=1
+                ;;
+            esac
           done
           if [ $FOUND_SECRETS -eq 1 ]; then
             exit 1
