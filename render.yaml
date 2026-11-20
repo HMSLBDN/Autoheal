@@ -7,6 +7,8 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
+    # Plan note: 'starter' provides continuous uptime (~$7/mo). For non-commercial testing,
+    # 'plan: free' can be used on web services, though free instances spin down after inactivity.
     plan: starter
     healthCheckPath: /api/v1/health
     envVars:
@@ -38,6 +40,7 @@ services:
     runtime: docker
     dockerfilePath: ./backend/Dockerfile.celery_worker
     dockerContext: ./backend
+    # Plan note: Background workers on Render require at least 'plan: starter' (~$7/mo).
     plan: starter
     envVars:
       - key: APP_ENV
@@ -62,6 +65,8 @@ services:
   # ==============================================================================
   - type: redis
     name: autoheal-redis
+    # Plan note: Render managed Redis requires 'plan: starter' (~$7/mo).
+    # For a free alternative, external Redis (e.g. Upstash) can be linked via REDIS_URL.
     plan: starter
     ipAllowList: []
     maxmemoryPolicy: allkeys-lru
@@ -73,5 +78,7 @@ databases:
   - name: autoheal-db
     databaseName: autoheal_db
     user: autoheal_user
+    # Plan note: 'plan: starter' provides permanent persistent storage (~$7/mo).
+    # Render 'plan: free' database expires after 30 days unless upgraded.
     plan: starter
     ipAllowList: []

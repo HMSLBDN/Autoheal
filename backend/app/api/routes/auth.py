@@ -47,31 +47,37 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
     """Sets secure, HttpOnly refresh token cookie on HTTP response."""
-    secure_cookie = settings.APP_ENV not in ("development", "test")
-    samesite_policy = "none" if secure_cookie else "lax"
+    secure_cookie = settings.COOKIE_SECURE if settings.COOKIE_SECURE is not None else (settings.APP_ENV not in ("development", "test"))
+    samesite_policy = settings.COOKIE_SAMESITE if settings.COOKIE_SAMESITE is not None else ("none" if secure_cookie else "lax")
     max_age_seconds = settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        max_age=max_age_seconds,
-        httponly=True,
-        samesite=samesite_policy,
-        secure=secure_cookie,
-        path="/api/v1/auth",
-    )
+    kwargs = {
+        "key": "refresh_token",
+        "value": refresh_token,
+        "max_age": max_age_seconds,
+        "httponly": True,
+        "samesite": samesite_policy,
+        "secure": secure_cookie,
+        "path": "/api/v1/auth",
+    }
+    if settings.COOKIE_DOMAIN:
+        kwargs["domain"] = settings.COOKIE_DOMAIN
+    response.set_cookie(**kwargs)
 
 
 def _clear_refresh_cookie(response: Response) -> None:
     """Clears refresh token cookie with matching attributes."""
-    secure_cookie = settings.APP_ENV not in ("development", "test")
-    samesite_policy = "none" if secure_cookie else "lax"
-    response.delete_cookie(
-        key="refresh_token",
-        path="/api/v1/auth",
-        secure=secure_cookie,
-        samesite=samesite_policy,
-        httponly=True,
-    )
+    secure_cookie = settings.COOKIE_SECURE if settings.COOKIE_SECURE is not None else (settings.APP_ENV not in ("development", "test"))
+    samesite_policy = settings.COOKIE_SAMESITE if settings.COOKIE_SAMESITE is not None else ("none" if secure_cookie else "lax")
+    kwargs = {
+        "key": "refresh_token",
+        "path": "/api/v1/auth",
+        "secure": secure_cookie,
+        "samesite": samesite_policy,
+        "httponly": True,
+    }
+    if settings.COOKIE_DOMAIN:
+        kwargs["domain"] = settings.COOKIE_DOMAIN
+    response.delete_cookie(**kwargs)
 
 
 def _to_utc(dt: datetime) -> datetime:

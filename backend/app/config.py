@@ -4,14 +4,15 @@ AutoHeal DevOps — Configuration & Environment Management
 
 from functools import lru_cache
 from typing import List, Literal, Optional, Union
-from pydantic import Field, field_validator
+import json
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """
     Application settings loaded from environment variables or .env file.
-    Follows 12-factor principles with safe development defaults.
+    Follows 12-factor principles with safe development defaults and robust aliases.
     """
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -23,12 +24,17 @@ class Settings(BaseSettings):
     # Application
     APP_NAME: str = "AutoHeal DevOps API"
     APP_VERSION: str = "0.1.0"
-    APP_ENV: Literal["development", "staging", "production", "test"] = "development"
+    APP_ENV: Literal["development", "staging", "production", "test"] = Field(
+        default="development",
+        validation_alias=AliasChoices("APP_ENV", "ENVIRONMENT"),
+        description="Application runtime environment"
+    )
     DEBUG: bool = True
     PORT: int = 8000
     HOST: str = "0.0.0.0"
     SECRET_KEY: str = Field(
         default="autoheal_insecure_dev_secret_change_in_production_1234567890",
+        validation_alias=AliasChoices("SECRET_KEY", "JWT_SECRET_KEY"),
         description="Master encryption and cryptographic signature key"
     )
 
@@ -36,12 +42,16 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
 
     # CORS Allowed Origins
-    CORS_ORIGINS: Union[List[str], str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://autoheal-omega.vercel.app",
-        "https://autoheal-devops.vercel.app",
-    ]
+    CORS_ORIGINS: Union[List[str], str] = Field(
+        default=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "https://autoheal-omega.vercel.app",
+            "https://autoheal-devops.vercel.app",
+        ],
+        validation_alias=AliasChoices("CORS_ORIGINS", "ALLOWED_ORIGINS"),
+        description="List or comma-separated string of trusted CORS origins"
+    )
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -52,17 +62,27 @@ class Settings(BaseSettings):
             "https://autoheal-omega.vercel.app",
             "https://autoheal-devops.vercel.app",
         ]
-        if isinstance(value, str) and not value.startswith("["):
+        if isinstance(value, str):
+            value = value.strip()
+            if value.startswith("[") and value.endswith("]"):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        value = parsed
+                except Exception:
+                    pass
+        if isinstance(value, str):
             origins = [i.strip() for i in value.split(",") if i.strip()]
             for o in default_origins:
                 if o not in origins:
                     origins.append(o)
             return origins
         elif isinstance(value, list):
+            res = list(value)
             for o in default_origins:
-                if o not in value:
-                    value.append(o)
-            return value
+                if o not in res:
+                    res.append(o)
+            return res
         return default_origins
 
     # Database
@@ -90,8 +110,16 @@ class Settings(BaseSettings):
     # Redis Broker & Cache
     REDIS_URL: str = Field(
         default="redis://localhost:6379/0",
+        validation_alias=AliasChoices("REDIS_URL", "CELERY_BROKER_URL"),
         description="Redis connection URI for Celery tasks and session revocation"
     )
+    CELERY_BROKER_URL: Optional[str] = None
+    CELERY_RESULT_BACKEND: Optional[str] = None
+
+    # Cookie & Authentication Settings
+    COOKIE_SECURE: Optional[bool] = None
+    COOKIE_SAMESITE: Optional[str] = None
+    COOKIE_DOMAIN: Optional[str] = None
 
     # JWT & Authentication
     JWT_ALGORITHM: str = "HS256"
