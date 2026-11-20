@@ -1,4 +1,15 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, '') ?? ''
+function normalizeBaseUrl(url?: string): string {
+  if (!url) return ''
+  let trimmed = url.trim().replace(/\/+$/, '')
+  if (trimmed.endsWith('/api/v1')) {
+    trimmed = trimmed.slice(0, -7)
+  } else if (trimmed.endsWith('/api')) {
+    trimmed = trimmed.slice(0, -4)
+  }
+  return trimmed.replace(/\/+$/, '')
+}
+
+export const API_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL)
 export const isApiConfigured = API_BASE_URL.length > 0
 export const isDemoModeExplicit = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
@@ -8,6 +19,12 @@ export const isDemoMode = isDemoModeExplicit || (!isApiConfigured && process.env
 
 const TOKEN_KEY = 'autoheal_access_token'
 const USER_KEY = 'autoheal_user'
+
+export function buildApiUrl(path: string): string {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`
+  if (!API_BASE_URL) return cleanPath
+  return `${API_BASE_URL}${cleanPath}`
+}
 
 export type AuthUser = {
   id: string
@@ -74,7 +91,7 @@ async function performTokenRefresh(): Promise<string | null> {
 
   activeRefreshPromise = (async () => {
     try {
-      const refreshRes = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+      const refreshRes = await fetch(buildApiUrl('/api/v1/auth/refresh'), {
         method: 'POST',
         headers: { Accept: 'application/json' },
         credentials: 'include',
@@ -104,7 +121,7 @@ async function performTokenRefresh(): Promise<string | null> {
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!API_BASE_URL) {
-    throw new ApiError('The FastAPI service is not configured. Set NEXT_PUBLIC_API_BASE_URL.', 0)
+    throw new ApiError('The FastAPI backend service is not configured. Set NEXT_PUBLIC_API_BASE_URL.', 0)
   }
 
   const headers: Record<string, string> = {
@@ -128,7 +145,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
   let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(buildApiUrl(path), {
       cache: 'no-store',
       credentials: 'include',
       ...init,
@@ -139,7 +156,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     if (err instanceof Error && err.name === 'AbortError') {
       throw new ApiError('Request timed out after 15 seconds.', 408)
     }
-    throw new ApiError('Could not connect to the AutoHeal backend. Verify server is running.', 0)
+    throw new ApiError('Could not connect to the AutoHeal backend API. Verify the server is running and accessible.', 0)
   } finally {
     if (timeoutId) clearTimeout(timeoutId)
   }
@@ -149,7 +166,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     const newToken = await performTokenRefresh()
     if (newToken) {
       headers['Authorization'] = `Bearer ${newToken}`
-      const retryRes = await fetch(`${API_BASE_URL}${path}`, {
+      const retryRes = await fetch(buildApiUrl(path), {
         cache: 'no-store',
         credentials: 'include',
         ...init,
@@ -188,7 +205,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 }
 
 export async function apiBlob(path: string, signal?: AbortSignal): Promise<Blob> {
-  if (!API_BASE_URL) throw new ApiError('The FastAPI service is not configured.', 0)
+  if (!API_BASE_URL) throw new ApiError('The FastAPI backend service is not configured.', 0)
   const headers: Record<string, string> = {
     Accept: 'application/pdf, application/json, application/octet-stream',
   }
@@ -199,7 +216,7 @@ export async function apiBlob(path: string, signal?: AbortSignal): Promise<Blob>
 
   let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(buildApiUrl(path), {
       cache: 'no-store',
       credentials: 'include',
       headers,
@@ -213,7 +230,7 @@ export async function apiBlob(path: string, signal?: AbortSignal): Promise<Blob>
     const newToken = await performTokenRefresh()
     if (newToken) {
       headers['Authorization'] = `Bearer ${newToken}`
-      response = await fetch(`${API_BASE_URL}${path}`, {
+      response = await fetch(buildApiUrl(path), {
         cache: 'no-store',
         credentials: 'include',
         headers,

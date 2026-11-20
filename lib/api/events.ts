@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { API_BASE_URL, getAccessToken, isApiConfigured } from './client'
+import { buildApiUrl, getAccessToken, isApiConfigured } from './client'
 
 export type EventCallback<T = unknown> = (data: T) => void
 
@@ -43,11 +43,11 @@ export function useRealtimeEvents(handlers: RealtimeHandlers, enabled = true) {
         return
       }
 
-      let streamUrl = `${API_BASE_URL}/api/v1/events/stream?token=${encodeURIComponent(token)}`
+      let streamUrl = `${buildApiUrl('/api/v1/events/stream')}?token=${encodeURIComponent(token)}`
 
       // Hardened SSE authentication: request short-lived single-use ticket to prevent JWT leakage in access logs
       try {
-        const ticketRes = await fetch(`${API_BASE_URL}/api/v1/events/ticket`, {
+        const ticketRes = await fetch(buildApiUrl('/api/v1/events/ticket'), {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -58,7 +58,7 @@ export function useRealtimeEvents(handlers: RealtimeHandlers, enabled = true) {
         if (ticketRes.ok) {
           const ticketData = await ticketRes.json()
           if (ticketData?.ticket) {
-            streamUrl = `${API_BASE_URL}/api/v1/events/stream?ticket=${encodeURIComponent(ticketData.ticket)}`
+            streamUrl = `${buildApiUrl('/api/v1/events/stream')}?ticket=${encodeURIComponent(ticketData.ticket)}`
           }
         }
       } catch {

@@ -35,7 +35,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
         router.push('/dashboard')
       } else {
         // Fallback when NEXT_PUBLIC_API_BASE_URL is not set
-        setMessage('Backend API URL is not configured. Set NEXT_PUBLIC_API_BASE_URL in .env to connect to the FastAPI authentication service.')
+        setMessage('Backend API URL is not configured. Set NEXT_PUBLIC_API_BASE_URL in environment variables to connect to the FastAPI authentication backend.')
       }
     } catch (err) {
       const errMessage = err instanceof Error ? err.message : 'Authentication failed. Please check your credentials.'

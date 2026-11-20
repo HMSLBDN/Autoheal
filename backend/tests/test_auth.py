@@ -440,3 +440,90 @@ async def test_rbac_permission_enforcement(auth_client: TestClient, db_session: 
     )
     assert res_approve_allowed.status_code == 200
     assert res_approve_allowed.json()["status"] == "approved"
+
+
+def test_cors_preflight_for_vercel_production_and_preview(auth_client: TestClient):
+    """CORS headers must be properly returned for Vercel production domain and preview URLs."""
+    # Production Vercel domain
+    res_prod = auth_client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "https://autoheal-omega.vercel.app",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type, Authorization",
+        },
+    )
+    assert res_prod.status_code == 200
+    assert res_prod.headers.get("access-control-allow-origin") == "https://autoheal-omega.vercel.app"
+    assert res_prod.headers.get("access-control-allow-credentials") == "true"
+
+    # Preview Vercel domain
+    res_preview = auth_client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "https://autoheal-omega-preview-pr12.vercel.app",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type, Authorization",
+        },
+    )
+    assert res_preview.status_code == 200
+    assert res_preview.headers.get("access-control-allow-origin") == "https://autoheal-omega-preview-pr12.vercel.app"
+    assert res_preview.headers.get("access-control-allow-credentials") == "true"
+
+    # Untrusted origin must NOT receive access-control-allow-origin
+    res_untrusted = auth_client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "https://autoheal-attacker.vercel.app",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "Content-Type, Authorization",
+        },
+    )
+    assert res_untrusted.headers.get("access-control-allow-origin") is None
+
+
+def test_refresh_token_via_request_body_fallback(auth_client: TestClient):
+    """Programs and browsers with blocked cookies can rotate tokens via request body."""
+    reg_res = auth_client.post("/api/v1/auth/register", json={
+        "email": "body_refresh_test@example.com",
+        "password": "Password123!",
+        "full_name": "Body Refresh User",
+    })
+    assert reg_res.status_code == 201
+    refresh_token = reg_res.json()["refresh_token"]
+    assert refresh_token is not None
+
+    # Clear cookie from client to simulate cookie-blocked browser
+    auth_client.cookies.clear()
+
+    # Refresh via request body
+    refresh_res = auth_client.post(
+        "/api/v1/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+    assert refresh_res.status_code == 200
+    new_data = refresh_res.json()
+    assert "access_token" in new_data
+    assert "refresh_token" in new_data
+    assert new_data["refresh_token"] != refresh_token
+
+
+def test_cookie_attributes_in_production_environment(auth_client: TestClient):
+    """In production, refresh cookie must use SameSite=None and Secure=True for cross-site browser support."""
+    from app.config import get_settings
+    current_settings = get_settings()
+    original_env = current_settings.APP_ENV
+    try:
+        current_settings.APP_ENV = "production"
+        reg_res = auth_client.post("/api/v1/auth/register", json={
+            "email": "prod_cookie_test@example.com",
+            "password": "Password123!",
+            "full_name": "Prod Cookie User",
+        })
+        assert reg_res.status_code == 201
+        set_cookie_header = reg_res.headers.get("set-cookie", "").lower()
+        assert "samesite=none" in set_cookie_header
+        assert "secure" in set_cookie_header
+        assert "httponly" in set_cookie_header
+    finally:
+        current_settings.APP_ENV = original_env

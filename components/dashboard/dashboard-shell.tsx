@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { Activity, AlertTriangle, BarChart3, Bell, ChevronDown, Clock3, Command, FileText, Gauge, LayoutDashboard, LogOut, Menu, Search, Settings2, Workflow, X } from 'lucide-react'
 import { Brand } from '@/components/marketing/brand'
-import { AuthUser, getAccessToken, getStoredUser, isApiConfigured } from '@/lib/api/client'
+import { AuthUser, getAccessToken, getStoredUser, isApiConfigured, isDemoModeExplicit } from '@/lib/api/client'
 import { authApi } from '@/lib/api/resources'
 
 type DashboardControls = { query: string; setQuery: (value: string) => void; environment: string; setEnvironment: (value: string) => void }
@@ -60,10 +60,19 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, [isMobile, sidebarOpen])
 
   useEffect(() => {
-    if (isApiConfigured && getAccessToken()) {
+    if (isApiConfigured && !isDemoModeExplicit) {
+      const token = getAccessToken()
+      if (!token) {
+        router.push('/login')
+        return
+      }
+      authApi.me().then(setCurrentUser).catch(() => {
+        router.push('/login')
+      })
+    } else if (isApiConfigured && getAccessToken()) {
       authApi.me().then(setCurrentUser).catch(() => {})
     }
-  }, [])
+  }, [router])
 
   async function handleLogout() {
     setProfileOpen(false)

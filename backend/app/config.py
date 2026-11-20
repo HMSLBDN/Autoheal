@@ -39,17 +39,31 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "https://autoheal-devops.vercel.app"
+        "https://autoheal-omega.vercel.app",
+        "https://autoheal-devops.vercel.app",
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, value: Union[str, List[str]]) -> List[str]:
+        default_origins = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "https://autoheal-omega.vercel.app",
+            "https://autoheal-devops.vercel.app",
+        ]
         if isinstance(value, str) and not value.startswith("["):
-            return [i.strip() for i in value.split(",") if i.strip()]
+            origins = [i.strip() for i in value.split(",") if i.strip()]
+            for o in default_origins:
+                if o not in origins:
+                    origins.append(o)
+            return origins
         elif isinstance(value, list):
+            for o in default_origins:
+                if o not in value:
+                    value.append(o)
             return value
-        return ["http://localhost:3000"]
+        return default_origins
 
     # Database
     DATABASE_URL: str = Field(
