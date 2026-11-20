@@ -70,6 +70,18 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://autoheal_user:autoheal_dev_password@localhost:5432/autoheal_db",
         description="Async PostgreSQL connection URI"
     )
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def assemble_database_url(cls, value: str) -> str:
+        if not value:
+            return value
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif value.startswith("postgresql://") and not value.startswith("postgresql+"):
+            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return value
+
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30

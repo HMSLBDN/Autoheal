@@ -1,0 +1,77 @@
+services:
+  # ==============================================================================
+  # FastAPI Production Web API Service
+  # ==============================================================================
+  - type: web
+    name: autoheal-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: https://autoheal-omega.vercel.app,https://autoheal-devops.vercel.app
+      - key: DATABASE_URL
+        fromDatabase:
+          name: autoheal-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: autoheal-redis
+          property: connectionString
+      - key: ALERTMANAGER_HMAC_SECRET
+        generateValue: true
+
+  # ==============================================================================
+  # Celery Background Worker
+  # ==============================================================================
+  - type: worker
+    name: autoheal-celery-worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile.celery_worker
+    dockerContext: ./backend
+    plan: starter
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: autoheal-backend
+          envVarKey: SECRET_KEY
+      - key: DATABASE_URL
+        fromDatabase:
+          name: autoheal-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: autoheal-redis
+          property: connectionString
+
+  # ==============================================================================
+  # Redis Queue & Cache Store
+  # ==============================================================================
+  - type: redis
+    name: autoheal-redis
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
+
+databases:
+  # ==============================================================================
+  # PostgreSQL Database (Version 16, persistent storage, private networking)
+  # ==============================================================================
+  - name: autoheal-db
+    databaseName: autoheal_db
+    user: autoheal_user
+    plan: starter
+    ipAllowList: []
