@@ -1,0 +1,305 @@
+{
+  "timestamp": "2026-11-21T14:40:40.563853+00:00",
+  "phase": 13,
+  "scenarios": {
+    "scenario_a_happy_path": {
+      "status": "SUCCESS",
+      "steps": [
+        {
+          "step": 1,
+          "name": "baseline_health",
+          "status": 200,
+          "data": {
+            "service": "checkout-api",
+            "environment": "production",
+            "status": "healthy",
+            "uptime_seconds": 3378,
+            "latency_ms": 20,
+            "error_rate": 0.0
+          }
+        },
+        {
+          "step": 2,
+          "name": "inject_chaos_failure",
+          "status": 200,
+          "data": {
+            "message": "Service forced into failed state",
+            "state": {
+              "service": "checkout-api",
+              "environment": "production",
+              "status": "unhealthy",
+              "latency_ms": 10,
+              "error_rate": 1.0,
+              "cpu_usage": 0.1,
+              "memory_bytes": 268435456,
+              "total_requests": 679,
+              "total_errors": 15,
+              "uptime_seconds": 3378
+            }
+          }
+        },
+        {
+          "step": 3,
+          "name": "verify_degradation",
+          "status": 503,
+          "data": {
+            "service": "checkout-api",
+            "environment": "production",
+            "status": "unhealthy",
+            "uptime_seconds": 3378,
+            "latency_ms": 10,
+            "error_rate": 1.0
+          }
+        },
+        {
+          "step": 4,
+          "name": "resolve_service",
+          "service_id": "svc-api"
+        },
+        {
+          "step": 5,
+          "name": "incident_detected",
+          "incident_id": "INC-PILOT-01"
+        },
+        {
+          "step": 7,
+          "name": "recovery_requested",
+          "recovery_id": "REC-707",
+          "data": {
+            "id": "REC-707",
+            "incidentId": "INC-PILOT-01",
+            "serviceName": "checkout-api",
+            "action": "restart_service",
+            "status": "pending_approval",
+            "approvalRequired": true,
+            "requestedBy": "pilot-operator@autoheal.io",
+            "requestedAt": "14:40:41",
+            "durationSeconds": null,
+            "verification": "pending",
+            "result": null
+          }
+        },
+        {
+          "step": 8,
+          "name": "operator_approval",
+          "status": 200,
+          "data": {
+            "id": "REC-707",
+            "incidentId": "INC-PILOT-01",
+            "serviceName": "checkout-api",
+            "action": "restart_service",
+            "status": "approved",
+            "approvalRequired": true,
+            "requestedBy": "pilot-operator@autoheal.io",
+            "requestedAt": "2026-11-21 14:40 UTC",
+            "durationSeconds": null,
+            "verification": "pending",
+            "result": null
+          }
+        },
+        {
+          "step": 9,
+          "name": "recovery_executed",
+          "status": 200,
+          "data": {
+            "id": "REC-707",
+            "incidentId": "INC-PILOT-01",
+            "serviceName": "checkout-api",
+            "action": "restart_service",
+            "status": "completed",
+            "approvalRequired": true,
+            "requestedBy": "pilot-operator@autoheal.io",
+            "requestedAt": "2026-11-21 14:40 UTC",
+            "durationSeconds": 12,
+            "verification": "passed",
+            "result": {
+              "verified": true,
+              "summary": "Verified: checkout-api returned to healthy state. Error rate dropped from 3.84% to 0.02% (threshold: 1.0%), P95 latency normalized to 115ms.",
+              "completedAt": "2026-11-21 14:40 UTC"
+            }
+          }
+        },
+        {
+          "step": 10,
+          "name": "chaos_recovered",
+          "status": 200,
+          "data": {
+            "message": "Service restored to normal health",
+            "state": {
+              "service": "checkout-api",
+              "environment": "production",
+              "status": "healthy",
+              "latency_ms": 20,
+              "error_rate": 0.0,
+              "cpu_usage": 0.2,
+              "memory_bytes": 268435456,
+              "total_requests": 680,
+              "total_errors": 16,
+              "uptime_seconds": 3378
+            }
+          }
+        },
+        {
+          "step": 11,
+          "name": "post_recovery_verification",
+          "status": 200,
+          "data": {
+            "service": "checkout-api",
+            "environment": "production",
+            "status": "healthy",
+            "uptime_seconds": 3378,
+            "latency_ms": 20,
+            "error_rate": 0.0
+          }
+        },
+        {
+          "step": 12,
+          "name": "incident_resolved",
+          "status": 200,
+          "data": {
+            "id": "INC-PILOT-01",
+            "serviceId": "svc-api",
+            "serviceName": "checkout-api",
+            "title": "Elevated Error Rate & Connection Latency on checkout-api",
+            "severity": "high",
+            "status": "resolved",
+            "detectedAt": "2026-11-21 14:39:13 UTC",
+            "recoveryStatus": "Completed / Verified healthy",
+            "errorRate": 3.84,
+            "threshold": 1.0,
+            "probableCause": "Database connection pool exhaustion and transaction timeout spike.",
+            "recommendedAction": "restart_service",
+            "evidence": [
+              {
+                "id": "ev-2ed7f945",
+                "kind": "health_check",
+                "title": "Post-Recovery SLA Check",
+                "detail": "Availability 99.98%, Error rate 0.02% (pre-recovery: 3.84%), P95 Latency 115ms.",
+                "timestamp": "14:40:11"
+              },
+              {
+                "id": "ev-ad390fb4",
+                "kind": "health_check",
+                "title": "Post-Recovery SLA Check",
+                "detail": "Availability 99.98%, Error rate 0.02% (pre-recovery: 3.84%), P95 Latency 115ms.",
+                "timestamp": "14:40:41"
+              }
+            ],
+            "events": [
+              {
+                "id": "evt-4d7f8302",
+                "label": "Status: Resolved",
+                "detail": "Transitioned from recovering to resolved by pilot-operator@autoheal.io. Reason: Post-recovery verification confirmed error rate normalized to 0.0% and SLA restored.",
+                "timestamp": "14:39:13",
+                "tone": "success"
+              },
+              {
+                "id": "evt-4ed42cd2",
+                "label": "Recovery Executing",
+                "detail": "Executing action 'Graceful Service Restart'.",
+                "timestamp": "14:40:11",
+                "tone": "neutral"
+              },
+              {
+                "id": "evt-80b2bdf5",
+                "label": "Recovery Verified",
+                "detail": "Automated verification passed. Service 'checkout-api' SLA restored.",
+                "timestamp": "14:40:11",
+                "tone": "success"
+              },
+              {
+                "id": "evt-77454da3",
+                "label": "Recovery Executing",
+                "detail": "Executing action 'Graceful Service Restart'.",
+                "timestamp": "14:40:41",
+                "tone": "neutral"
+              },
+              {
+                "id": "evt-2fa1f61a",
+                "label": "Recovery Verified",
+                "detail": "Automated verification passed. Service 'checkout-api' SLA restored.",
+                "timestamp": "14:40:41",
+                "tone": "success"
+              }
+            ]
+          }
+        },
+        {
+          "step": 13,
+          "name": "audit_trail_verified",
+          "transition_count": 1
+        }
+      ]
+    },
+    "scenario_c_rbac_guard": {
+      "status": "SUCCESS",
+      "viewer_status_code": 403,
+      "detail": {
+        "detail": "Insufficient permissions. Required role: admin, operator. Current role: viewer."
+      },
+      "enforced": true
+    },
+    "scenario_b_failed_recovery_escalation": {
+      "status": "SUCCESS",
+      "steps": [
+        {
+          "step": 1,
+          "name": "reject_validation",
+          "status": 409
+        },
+        {
+          "step": 2,
+          "name": "escalate_to_oncall",
+          "status": 200,
+          "data": {
+            "id": "INC-PILOT-02",
+            "serviceId": "svc-api",
+            "serviceName": "checkout-api",
+            "title": "Elevated Error Rate & Connection Latency on checkout-api",
+            "severity": "high",
+            "status": "escalated",
+            "detectedAt": "2026-11-21 14:39:13 UTC",
+            "recoveryStatus": "Escalated to on-call",
+            "errorRate": 3.84,
+            "threshold": 1.0,
+            "probableCause": "Database connection pool exhaustion and transaction timeout spike.",
+            "recommendedAction": "restart_service",
+            "evidence": [],
+            "events": [
+              {
+                "id": "evt-e8da59d9",
+                "label": "Status: Escalated",
+                "detail": "Transitioned from investigation to escalated by pilot-operator@autoheal.io. Reason: Automated recovery degraded: escalating to primary on-call SRE per runbook policy.",
+                "timestamp": "14:39:14",
+                "tone": "warning"
+              },
+              {
+                "id": "evt-71e730a9",
+                "label": "Status: Escalated",
+                "detail": "Transitioned from investigation to escalated by pilot-operator@autoheal.io. Reason: Automated recovery degraded: escalating to primary on-call SRE per runbook policy.",
+                "timestamp": "14:40:11",
+                "tone": "warning"
+              }
+            ]
+          }
+        },
+        {
+          "step": 4,
+          "name": "verify_unresolved",
+          "status": "escalated",
+          "unresolved": true
+        },
+        {
+          "step": 5,
+          "name": "slo_scorecard",
+          "compliance_pct": 62.5
+        },
+        {
+          "step": 6,
+          "name": "onboarding_checklist",
+          "completion_pct": 71.4
+        }
+      ]
+    }
+  }
+}

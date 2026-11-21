@@ -12,15 +12,21 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DatabaseDep, OrgDep, RequireOperatorDep
 from app.models.audit import AuditLog
-from app.models.incident import Incident
+from app.models.incident import Incident, IncidentTransition
 from app.models.recovery import RecoveryAction
 from app.schemas.incident import (
     IncidentEvidenceResponse,
     IncidentEventResponse,
     IncidentResponse,
+    IncidentTransitionRequest,
+    IncidentTransitionResponse,
 )
 from app.schemas.recovery import RecoveryActionResponse
 from app.services.events import event_broadcaster
+from app.services.incident.state_machine import (
+    InvalidIncidentTransitionError,
+    incident_state_machine,
+)
 from app.services.pdf_report import generate_incident_pdf
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
@@ -353,3 +359,100 @@ async def download_incident_report(
             "Content-Length": str(len(pdf_bytes)),
         },
     )
+
+
+@router.post(
+    "/{incident_id}/transition",
+    response_model=IncidentResponse,
+    summary="Advance incident lifecycle status (Operator or Admin)",
+)
+async def transition_incident_route(
+    incident_id: str,
+    payload: IncidentTransitionRequest,
+    org: OrgDep,
+    current_user: RequireOperatorDep,
+    db: DatabaseDep,
+) -> IncidentResponse:
+    """
+    Advances an incident through its formal lifecycle:
+    new -> acknowledged -> investigation -> diagnosis -> approval_pending
+    -> recovery_in_progress -> recovery_verification -> resolved / failed_recovery / escalated / reopened.
+    Enforces that 'resolved' requires verified recovery or explicit operator sign-off with reason.
+    Records tamper-evident audit record.
+    """
+    try:
+        updated_incident = await incident_state_machine.transition_incident(
+            db=db,
+            incident_id=incident_id,
+            organization_id=org.id,
+            target_status=payload.new_status,
+            actor_id=current_user.id,
+            actor_email=current_user.email,
+            actor_role=current_user.role,
+            reason=payload.reason,
+            evidence_id=payload.evidence_id,
+            sign_off=bool(payload.sign_off),
+        )
+
+        # Reload incident with relations
+        stmt = (
+            select(Incident)
+            .options(selectinload(Incident.evidence), selectinload(Incident.events))
+            .where(Incident.id == incident_id)
+        )
+        res = await db.execute(stmt)
+        refreshed = res.scalar_one()
+
+        return format_incident_response(refreshed)
+
+    except InvalidIncidentTransitionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/{incident_id}/transitions",
+    response_model=List[IncidentTransitionResponse],
+    summary="List audit history of incident lifecycle transitions",
+)
+async def get_incident_transitions(
+    incident_id: str,
+    org: OrgDep,
+    db: DatabaseDep,
+) -> List[IncidentTransitionResponse]:
+    """
+    Returns complete chronological history of state mutations, actors, reasons, and evidence.
+    """
+    stmt = (
+        select(IncidentTransition)
+        .where(
+            IncidentTransition.incident_id == incident_id,
+            IncidentTransition.organization_id == org.id,
+        )
+        .order_by(desc(IncidentTransition.created_at))
+    )
+    res = await db.execute(stmt)
+    records = res.scalars().all()
+
+    return [
+        IncidentTransitionResponse(
+            id=str(r.id),
+            incident_id=r.incident_id,
+            actor_email=r.actor_email,
+            actor_role=r.actor_role,
+            previous_state=r.previous_state,
+            new_state=r.new_state,
+            reason=r.reason,
+            evidence_id=r.evidence_id,
+            sign_off=r.sign_off,
+            created_at=r.created_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        )
+        for r in records
+    ]

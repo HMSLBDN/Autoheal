@@ -5,7 +5,7 @@ AutoHeal DevOps — Incident, Evidence & Timeline Event Models
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 import uuid
-from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text, Uuid
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, utc_now
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.service import Service
     from app.models.recovery import RecoveryAction
+    from app.models.user import User
 
 
 class Incident(Base, TimestampMixin):
@@ -123,6 +124,11 @@ class Incident(Base, TimestampMixin):
         back_populates="incident",
         cascade="all, delete-orphan",
     )
+    transitions: Mapped[List["IncidentTransition"]] = relationship(
+        "IncidentTransition",
+        back_populates="incident",
+        cascade="all, delete-orphan",
+    )
 
 
 class IncidentEvidence(Base):
@@ -217,4 +223,69 @@ class IncidentEvent(Base):
     incident: Mapped["Incident"] = relationship(
         "Incident",
         back_populates="events",
+    )
+
+
+class IncidentTransition(Base, TimestampMixin):
+    """
+    Tamper-evident audit trail for incident lifecycle state transitions.
+    Records acting user, timestamp, previous_state, new_state, reason, evidence_id, sign_off.
+    """
+    __tablename__ = "incident_transitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    incident_id: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("incidents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    actor_email: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+    actor_role: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    previous_state: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    new_state: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+    evidence_id: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+    sign_off: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    incident: Mapped["Incident"] = relationship(
+        "Incident",
+        back_populates="transitions",
     )

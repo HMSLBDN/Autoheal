@@ -16,6 +16,7 @@ import type {
   NotificationDelivery,
   NotificationSubscription,
   ObservabilityMetrics,
+  OnboardingChecklist,
   Prediction,
   PreventiveRecommendation,
   RecoveryAction,
@@ -24,6 +25,9 @@ import type {
   SecurityAuditSummary,
   Service,
   ServiceRisk,
+  SLOMetricItem,
+  SLOSummary,
+  TeamInvitation,
   TimelineItem,
   TraceSpan,
   UnifiedTimeline,
@@ -724,4 +728,53 @@ export const demoTraceSpans: TraceSpan[] = [
   { trace_id: 'tr-7c1928412', span_id: 'sp-3', name: 'POST /api/v1/agents/verify-mtls', service: 'agent-mTLS', duration_ms: 28.6, status: 'OK', attributes: { 'tls.cipher': 'TLS_AES_256_GCM_SHA384', 'tls.client_cert': 'verified' }, timestamp: 'Today, 15:20:10' },
   { trace_id: 'tr-4d1029482', span_id: 'sp-4', name: 'SELECT database.pool.checkout', service: 'postgresql-asyncpg', duration_ms: 2.1, status: 'OK', attributes: { 'db.name': 'autoheal_production' }, timestamp: 'Today, 15:20:12' },
 ]
+
+export const demoOnboardingChecklist: OnboardingChecklist = {
+  organization_id: 'org-demo-pilot',
+  organization_name: 'Acme DevOps Enterprise',
+  plan: 'enterprise',
+  completion_percentage: 85.7,
+  is_ready_for_pilot: true,
+  steps: [
+    { id: 'org_setup', title: 'Tenant & Organization Provisioning', description: 'Active isolated tenant and enterprise quota.', completed: true, action_url: '/dashboard/settings', details: "Tenant: 'Acme DevOps Enterprise', Plan: enterprise" },
+    { id: 'admin_setup', title: 'Security Administrator Provisioned', description: 'Primary administrator credentials configured.', completed: true, action_url: '/dashboard/settings', details: '2 active admin accounts' },
+    { id: 'team_invites', title: 'Team Member Onboarding', description: 'Invite operators, developers, and SREs.', completed: true, action_url: '/dashboard/settings', details: '4 team members active' },
+    { id: 'services_connected', title: 'Register Monitored Services', description: 'Microservices connected to telemetry pipeline.', completed: true, action_url: '/dashboard/services', details: '5 services registered' },
+    { id: 'telemetry_active', title: 'Live Telemetry Ingestion', description: 'Real-time metrics, error rates, and traces streaming.', completed: true, action_url: '/dashboard', details: '14,892 samples recorded' },
+    { id: 'alert_channels', title: 'Notification & Alert Destinations', description: 'Configured Slack and Email alerting destinations.', completed: true, action_url: '/dashboard/notifications', details: 'Slack & Email active' },
+    { id: 'test_incident', title: 'Self-Healing Drill Walkthrough', description: 'Canary failure injection and autonomous resolution drill.', completed: false, action_url: '/dashboard/incidents', details: 'Pending initial drill' },
+  ],
+  stats: {
+    users: 4,
+    admins: 2,
+    services: 5,
+    metricSamples: 14892,
+    notificationChannels: 2,
+    incidents: 3,
+    resolvedIncidents: 2,
+  },
+}
+
+export const demoInvitations: TeamInvitation[] = [
+  { id: 'inv-1', email: 'sre-lead@acme.corp', role: 'operator', organization_id: 'org-demo-pilot', expires_at: '2026-11-28T18:00:00Z', is_accepted: false, created_at: '2026-11-21T18:00:00Z' },
+  { id: 'inv-2', email: 'dev-sec@acme.corp', role: 'viewer', organization_id: 'org-demo-pilot', expires_at: '2026-11-28T18:00:00Z', is_accepted: true, created_at: '2026-11-21T17:30:00Z' },
+]
+
+export const demoSLOSummary: SLOSummary = {
+  organization_id: 'org-demo-pilot',
+  period: 'last_24h',
+  overall_compliance_percent: 100.0,
+  overall_status: 'compliant',
+  metrics: [
+    { name: 'Monitored Service Availability', metric_key: 'service_availability', current_value: 99.98, target_value: 99.9, unit: '%', status: 'compliant', source: 'SYNTHETIC_DEMO', description: 'Average uptime across registered microservices.', sample_count: 5 },
+    { name: 'Mean Time to Acknowledge (MTTA)', metric_key: 'mtta', current_value: 38.5, target_value: 300.0, unit: 's', status: 'compliant', source: 'SYNTHETIC_DEMO', description: 'Seconds to alert acknowledgment.', sample_count: 3 },
+    { name: 'Mean Time to Resolve (MTTR)', metric_key: 'mttr', current_value: 242.0, target_value: 1800.0, unit: 's', status: 'compliant', source: 'SYNTHETIC_DEMO', description: 'Average seconds to verified incident resolution.', sample_count: 2 },
+    { name: 'Recovery Verification Success Rate', metric_key: 'recovery_verification_success_rate', current_value: 97.4, target_value: 95.0, unit: '%', status: 'compliant', source: 'SYNTHETIC_DEMO', description: 'Automated remediation verification pass rate.', sample_count: 38 },
+    { name: 'Failed Recovery Rate', metric_key: 'failed_recovery_rate', current_value: 2.6, target_value: 5.0, unit: '%', status: 'compliant', source: 'SYNTHETIC_DEMO', description: 'Remediation failure rate.', sample_count: 38 },
+    { name: 'Incident Escalation Rate', metric_key: 'escalation_rate', current_value: 3.3, target_value: 10.0, unit: '%', status: 'compliant', source: 'SYNTHETIC_DEMO', description: 'Incidents escalated to on-call paging.', sample_count: 3 },
+    { name: 'Notification Delivery Reliability', metric_key: 'notification_delivery_reliability', current_value: 99.8, target_value: 99.0, unit: '%', status: 'compliant', source: 'SYNTHETIC_DEMO', description: 'Webhook and messaging delivery rate.', sample_count: 142 },
+  ],
+  calculated_at: '2026-11-21T19:55:00Z',
+}
+
 
