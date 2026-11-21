@@ -3,9 +3,9 @@
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
   "name": "AutoHeal-DevOps-SaaS",
-  "documentNamespace": "https://autoheal.dev/spdx/96939b85-5d5b-4ded-accd-9c10d464978e",
+  "documentNamespace": "https://autoheal.dev/spdx/e1c3e18f-f8a8-4ced-8c7a-5c269f43432c",
   "creationInfo": {
-    "created": "2026-11-21T11:29:01.438983+00:00",
+    "created": "2026-11-21T12:06:19.864225+00:00",
     "creators": [
       "Tool: AutoHeal-SBOM-Generator-1.0"
     ]
@@ -250,6 +250,23 @@
       ]
     },
     {
+      "SPDXID": "SPDXRef-Package-charset-normalizer-3.5.2",
+      "name": "charset-normalizer",
+      "versionInfo": "3.5.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/charset-normalizer@3.5.2"
+        }
+      ]
+    },
+    {
       "SPDXID": "SPDXRef-Package-click-8.5.1",
       "name": "click",
       "versionInfo": "8.5.1",
@@ -403,6 +420,23 @@
       ]
     },
     {
+      "SPDXID": "SPDXRef-Package-googleapis-common-protos-1.76.0",
+      "name": "googleapis-common-protos",
+      "versionInfo": "1.76.0",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/googleapis-common-protos@1.76.0"
+        }
+      ]
+    },
+    {
       "SPDXID": "SPDXRef-Package-greenlet-3.5.6",
       "name": "greenlet",
       "versionInfo": "3.5.6",
@@ -416,6 +450,23 @@
           "referenceCategory": "PACKAGE_MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:pypi/greenlet@3.5.6"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-grpcio-1.85.3",
+      "name": "grpcio",
+      "versionInfo": "1.85.3",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/grpcio@1.85.3"
         }
       ]
     },
@@ -590,6 +641,159 @@
       ]
     },
     {
+      "SPDXID": "SPDXRef-Package-opentelemetry-exporter-http-transport-0.66b2",
+      "name": "opentelemetry-exporter-http-transport",
+      "versionInfo": "0.66b2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/opentelemetry-exporter-http-transport@0.66b2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-opentelemetry-exporter-otlp-1.45.2",
+      "name": "opentelemetry-exporter-otlp",
+      "versionInfo": "1.45.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/opentelemetry-exporter-otlp@1.45.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-opentelemetry-exporter-otlp-common-0.66b2",
+      "name": "opentelemetry-exporter-otlp-common",
+      "versionInfo": "0.66b2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/opentelemetry-exporter-otlp-common@0.66b2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-opentelemetry-exporter-otlp-proto-common-1.45.2",
+      "name": "opentelemetry-exporter-otlp-proto-common",
+      "versionInfo": "1.45.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/opentelemetry-exporter-otlp-proto-common@1.45.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-opentelemetry-exporter-otlp-proto-grpc-1.45.2",
+      "name": "opentelemetry-exporter-otlp-proto-grpc",
+      "versionInfo": "1.45.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/opentelemetry-exporter-otlp-proto-grpc@1.45.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-opentelemetry-exporter-otlp-proto-http-1.45.2",
+      "name": "opentelemetry-exporter-otlp-proto-http",
+      "versionInfo": "1.45.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/opentelemetry-exporter-otlp-proto-http@1.45.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-opentelemetry-proto-1.45.2",
+      "name": "opentelemetry-proto",
+      "versionInfo": "1.45.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/opentelemetry-proto@1.45.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-opentelemetry-sdk-1.45.2",
+      "name": "opentelemetry-sdk",
+      "versionInfo": "1.45.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/opentelemetry-sdk@1.45.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-opentelemetry-semantic-conventions-0.66b2",
+      "name": "opentelemetry-semantic-conventions",
+      "versionInfo": "0.66b2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/opentelemetry-semantic-conventions@0.66b2"
+        }
+      ]
+    },
+    {
       "SPDXID": "SPDXRef-Package-packaging-26.3",
       "name": "packaging",
       "versionInfo": "26.3",
@@ -688,6 +892,23 @@
           "referenceCategory": "PACKAGE_MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:pypi/prompt_toolkit@3.0.53"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-protobuf-7.36.2",
+      "name": "protobuf",
+      "versionInfo": "7.36.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/protobuf@7.36.2"
         }
       ]
     },
@@ -913,6 +1134,23 @@
       ]
     },
     {
+      "SPDXID": "SPDXRef-Package-requests-2.34.2",
+      "name": "requests",
+      "versionInfo": "2.34.2",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/requests@2.34.2"
+        }
+      ]
+    },
+    {
       "SPDXID": "SPDXRef-Package-SQLAlchemy-2.0.57",
       "name": "SQLAlchemy",
       "versionInfo": "2.0.57",
@@ -994,6 +1232,23 @@
           "referenceCategory": "PACKAGE_MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:pypi/tzdata@2026.6"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-Package-urllib3-2.8.0",
+      "name": "urllib3",
+      "versionInfo": "2.8.0",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE_MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:pypi/urllib3@2.8.0"
         }
       ]
     },

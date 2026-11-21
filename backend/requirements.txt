@@ -35,6 +35,11 @@ redis>=6.1.0,<7.0.0
 # PDF Report Generation (for incident post-mortems)
 reportlab>=4.2.5,<4.3.0
 
+# Observability & Distributed Tracing
+opentelemetry-api>=1.28.0,<2.0.0
+opentelemetry-sdk>=1.28.0,<2.0.0
+opentelemetry-exporter-otlp>=1.28.0,<2.0.0
+
 # Testing
 pytest>=8.3.0,<8.4.0
 pytest-asyncio>=0.24.0,<0.25.0

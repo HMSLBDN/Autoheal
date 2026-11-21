@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-21T11:50:03.382927+00:00",
+  "timestamp": "2026-11-21T12:08:45.912851+00:00",
   "status": "PASSED",
   "source_database": "localhost:5432/autoheal_db",
   "steps": [
@@ -7,8 +7,8 @@
       "step": "dump_source_database",
       "status": "SUCCESS",
       "tables_count": 39,
-      "duration_seconds": 4.4683,
-      "sha256_checksum": "a86b2a9d19b636badec0189603aeef4ffaef28fdd3958c034ad50251815f4129",
+      "duration_seconds": 5.5555,
+      "sha256_checksum": "02216777fb5e3ab05422766441eb27f30f57bbfa6d717841529133f65d845723",
       "uncompressed_bytes": 2003
     },
     {
@@ -16,7 +16,7 @@
       "status": "SUCCESS",
       "duration_seconds": 0.0,
       "encrypted_bytes": 2764,
-      "encrypted_sha256": "e935a2f9e9853ebb45b17beef54aaad209f91240b502303c04559bb260e39fe4"
+      "encrypted_sha256": "9c2d3eb5a75cc4b48ab6d3183f16f3d3846e2aa1f5f5c33e56a1ed68bda193e3"
     },
     {
       "step": "decryption_and_checksum_verification",
@@ -27,17 +27,17 @@
     {
       "step": "isolated_restore_verification",
       "status": "SUCCESS",
-      "duration_seconds": 0.4032,
+      "duration_seconds": 1.5204,
       "restored_tables": 39
     }
   ],
   "metrics": {
-    "measured_rto_seconds": 0.4032,
+    "measured_rto_seconds": 1.5204,
     "rto_target_seconds": 900.0,
     "rto_sla_met": true,
-    "measured_rpo_seconds": 4.4683,
+    "measured_rpo_seconds": 5.5555,
     "rpo_target_seconds": 300.0,
     "rpo_sla_met": true,
-    "total_pipeline_duration_seconds": 4.872
+    "total_pipeline_duration_seconds": 7.087
   }
 }
