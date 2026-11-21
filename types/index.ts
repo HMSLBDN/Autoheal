@@ -1,6 +1,20 @@
 export type ServiceStatus = 'healthy' | 'degraded' | 'critical'
 export type Severity = 'critical' | 'high' | 'medium' | 'low'
-export type IncidentStatus = 'open' | 'investigating' | 'recovering' | 'escalated' | 'resolved'
+export type IncidentStatus =
+  | 'open'
+  | 'investigating'
+  | 'recovering'
+  | 'resolved'
+  | 'new'
+  | 'acknowledged'
+  | 'investigation'
+  | 'diagnosis'
+  | 'approval_pending'
+  | 'recovery_in_progress'
+  | 'recovery_verification'
+  | 'failed_recovery'
+  | 'escalated'
+  | 'reopened'
 export type RecoveryStatus = 'pending_approval' | 'approved' | 'running' | 'completed' | 'failed' | 'rejected'
 
 export interface Service {
@@ -570,5 +584,71 @@ export interface TraceSpan {
   status: string
   attributes: Record<string, any>
   timestamp: string
+}
+
+export interface OnboardingStep {
+  id: string
+  title: string
+  description: string
+  completed: boolean
+  action_url: string
+  details?: string | null
+}
+
+export interface OnboardingChecklist {
+  organization_id: string
+  organization_name: string
+  plan: string
+  completion_percentage: number
+  is_ready_for_pilot: boolean
+  steps: OnboardingStep[]
+  stats: Record<string, any>
+}
+
+export interface TeamInvitation {
+  id: string
+  email: string
+  role: string
+  organization_id: string
+  invited_by_email?: string | null
+  invitation_token?: string | null
+  invite_url?: string | null
+  expires_at: string
+  is_accepted: boolean
+  created_at: string
+}
+
+export interface SLOMetricItem {
+  name: string
+  metric_key: string
+  current_value: number
+  target_value: number
+  unit: string
+  status: 'compliant' | 'at_risk' | 'breached'
+  source: 'MEASURED' | 'CALCULATED' | 'SYNTHETIC_DEMO'
+  description: string
+  sample_count: number
+}
+
+export interface SLOSummary {
+  organization_id: string
+  period: string
+  overall_compliance_percent: number
+  overall_status: 'compliant' | 'at_risk' | 'breached'
+  metrics: SLOMetricItem[]
+  calculated_at: string
+}
+
+export interface IncidentTransitionAudit {
+  id: string
+  incident_id: string
+  actor_email: string
+  actor_role: string
+  previous_state: string
+  new_state: string
+  reason: string
+  evidence_id?: string | null
+  sign_off: boolean
+  created_at: string
 }
 

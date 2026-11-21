@@ -3,7 +3,7 @@ AutoHeal DevOps — Models Package Export
 """
 
 from app.models.base import Base, TimestampMixin, utc_now
-from app.models.organization import Organization
+from app.models.organization import Organization, OrganizationInvitation
 from app.models.user import User
 from app.models.refresh_token import RefreshToken
 from app.models.password_reset import PasswordReset
@@ -18,6 +18,7 @@ from app.models.incident import (
     Incident,
     IncidentEvidence,
     IncidentEvent,
+    IncidentTransition,
 )
 from app.models.recovery import (
     RecoveryAction,
@@ -60,6 +61,7 @@ __all__ = [
     "TimestampMixin",
     "utc_now",
     "Organization",
+    "OrganizationInvitation",
     "User",
     "RefreshToken",
     "PasswordReset",
@@ -71,6 +73,7 @@ __all__ = [
     "Incident",
     "IncidentEvidence",
     "IncidentEvent",
+    "IncidentTransition",
     "RecoveryAction",
     "RecoveryResult",
     "ServiceMetric",

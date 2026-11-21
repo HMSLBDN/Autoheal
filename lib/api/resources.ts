@@ -14,6 +14,7 @@ import type {
   IncidentEvent,
   IncidentEvidence,
   IncidentStatus,
+  IncidentTransitionAudit,
   InfrastructureAgent,
   IntelligenceOverview,
   ModelEvaluationMetric,
@@ -21,6 +22,8 @@ import type {
   NotificationDelivery,
   NotificationSubscription,
   ObservabilityMetrics,
+  OnboardingChecklist,
+  OnboardingStep,
   Prediction,
   PreventiveRecommendation,
   RecoveryAction,
@@ -31,6 +34,9 @@ import type {
   Service,
   ServiceMetrics,
   ServiceRisk,
+  SLOMetricItem,
+  SLOSummary,
+  TeamInvitation,
   TimelineItem,
   TraceSpan,
   UnifiedTimeline,
@@ -81,7 +87,13 @@ function validateIncident(value: unknown): Incident {
     numbers: ['errorRate', 'threshold'],
   })
   if (!['critical', 'high', 'medium', 'low'].includes(incident.severity)) throw new ApiError('The incident contains an unsupported severity.', 502)
-  if (!['open', 'investigating', 'recovering', 'resolved'].includes(incident.status)) throw new ApiError('The incident contains an unsupported status.', 502)
+  const allowedStatuses = [
+    'open', 'investigating', 'recovering', 'resolved',
+    'new', 'acknowledged', 'investigation', 'diagnosis',
+    'approval_pending', 'recovery_in_progress', 'recovery_verification',
+    'failed_recovery', 'escalated', 'reopened'
+  ]
+  if (!allowedStatuses.includes(incident.status)) throw new ApiError('The incident contains an unsupported status.', 502)
   return {
     ...incident,
     evidence: asArray<IncidentEvidence>(incident.evidence, 'incident evidence', validateEvidence),
@@ -142,12 +154,41 @@ export const incidentsApi = {
   async downloadReport(id: string, format: 'pdf' | 'json' = 'pdf', signal?: AbortSignal) {
     return apiBlob(`/api/v1/incidents/${encodeURIComponent(id)}/report?format=${format}`, signal)
   },
-  async transition(id: string, payload: { target_status: IncidentStatus; reason: string; is_manual_signoff?: boolean }) {
+  async transition(
+    id: string,
+    payloadOrStatus: string | { target_status?: IncidentStatus; new_status?: string; reason: string; is_manual_signoff?: boolean; sign_off?: boolean; evidence_id?: string },
+    reason?: string,
+    signOff: boolean = false,
+    evidenceId?: string
+  ) {
+    let body: Record<string, unknown>
+    if (typeof payloadOrStatus === 'object') {
+      body = {
+        target_status: payloadOrStatus.target_status || payloadOrStatus.new_status,
+        new_status: payloadOrStatus.new_status || payloadOrStatus.target_status,
+        reason: payloadOrStatus.reason,
+        is_manual_signoff: payloadOrStatus.is_manual_signoff ?? payloadOrStatus.sign_off ?? false,
+        sign_off: payloadOrStatus.sign_off ?? payloadOrStatus.is_manual_signoff ?? false,
+        evidence_id: payloadOrStatus.evidence_id,
+      }
+    } else {
+      body = {
+        new_status: payloadOrStatus,
+        target_status: payloadOrStatus,
+        reason: reason || '',
+        sign_off: signOff,
+        is_manual_signoff: signOff,
+        evidence_id: evidenceId,
+      }
+    }
     return validateIncident(await apiRequest<unknown>(`/api/v1/incidents/${encodeURIComponent(id)}/transition`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     }))
+  },
+  async getTransitions(id: string, signal?: AbortSignal): Promise<IncidentTransitionAudit[]> {
+    return apiRequest<IncidentTransitionAudit[]>(`/api/v1/incidents/${encodeURIComponent(id)}/transitions`, { signal })
   },
 }
 
@@ -706,4 +747,37 @@ export const agentCertApi = {
     })
   },
 }
+
+export const onboardingApi = {
+  async getChecklist(signal?: AbortSignal): Promise<OnboardingChecklist> {
+    return apiRequest<OnboardingChecklist>('/api/v1/onboarding/checklist', { signal })
+  },
+  async listInvitations(activeOnly: boolean = true, signal?: AbortSignal): Promise<TeamInvitation[]> {
+    return apiRequest<TeamInvitation[]>(`/api/v1/onboarding/invitations?active_only=${activeOnly}`, { signal })
+  },
+  async inviteMember(email: string, role: string = 'operator'): Promise<TeamInvitation> {
+    return apiRequest<TeamInvitation>('/api/v1/onboarding/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, role }),
+    })
+  },
+  async acceptInvite(token: string, fullName: string, password: string): Promise<AuthUser> {
+    return apiRequest<AuthUser>('/api/v1/onboarding/accept-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, full_name: fullName, password }),
+    })
+  },
+}
+
+export const sloApi = {
+  async getSummary(period: string = 'last_24h', signal?: AbortSignal): Promise<SLOSummary> {
+    return apiRequest<SLOSummary>(`/api/v1/slo/summary?period=${encodeURIComponent(period)}`, { signal })
+  },
+  async getMetrics(period: string = 'last_24h', signal?: AbortSignal): Promise<SLOMetricItem[]> {
+    return apiRequest<SLOMetricItem[]>(`/api/v1/slo/metrics?period=${encodeURIComponent(period)}`, { signal })
+  },
+}
+
 

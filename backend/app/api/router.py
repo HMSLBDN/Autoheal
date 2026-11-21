@@ -19,12 +19,14 @@ from app.api.routes import (
     intelligence,
     notifications,
     observability,
+    onboarding,
     policies,
     recoveries,
     releases,
     services,
     sessions,
     settings,
+    slo,
     sso,
     timeline,
     webhooks,
@@ -47,6 +49,8 @@ api_router.include_router(intelligence.router)
 api_router.include_router(events.router)
 api_router.include_router(settings.router)
 api_router.include_router(observability.router)
+api_router.include_router(onboarding.router)
+api_router.include_router(slo.router)
 api_router.include_router(notifications.router)
 api_router.include_router(webhooks.router)
 api_router.include_router(collaboration.router)

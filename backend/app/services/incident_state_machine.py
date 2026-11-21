@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.audit import AuditLog
-from app.models.incident import Incident, IncidentEvent
+from app.models.incident import Incident, IncidentEvent, IncidentTransition
 from app.models.recovery import RecoveryAction, RecoveryResult
 from app.models.user import User
 from app.services.events import event_broadcaster
@@ -307,6 +307,23 @@ class IncidentStateMachine:
             ))
 
         incident.updated_at = now
+
+        # Add immutable transition audit record
+        db.add(IncidentTransition(
+            id=uuid.uuid4(),
+            organization_id=incident.organization_id,
+            incident_id=incident.id,
+            actor_id=user.id,
+            actor_email=actor_email,
+            actor_role=getattr(user, "role", "operator"),
+            previous_state=clean_current,
+            new_state=clean_target,
+            reason=reason.strip(),
+            evidence_id=None,
+            sign_off=bool(is_manual_signoff),
+            created_at=now,
+        ))
+
         await db.commit()
 
         # Reload incident with events and evidence

@@ -12,16 +12,21 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DatabaseDep, OrgDep, RequireOperatorDep
 from app.models.audit import AuditLog
-from app.models.incident import Incident
+from app.models.incident import Incident, IncidentTransition
 from app.models.recovery import RecoveryAction
 from app.schemas.incident import (
     IncidentEvidenceResponse,
     IncidentEventResponse,
     IncidentResponse,
     IncidentTransitionRequest,
+    IncidentTransitionResponse,
 )
 from app.schemas.recovery import RecoveryActionResponse
 from app.services.events import event_broadcaster
+from app.services.incident.state_machine import (
+    InvalidIncidentTransitionError,
+    incident_state_machine,
+)
 from app.services.incident_state_machine import IncidentStateMachine
 from app.services.pdf_report import generate_incident_pdf
 
@@ -252,57 +257,6 @@ async def request_recovery(
     return recovery_resp
 
 
-@router.post(
-    "/{incident_id}/transition",
-    response_model=IncidentResponse,
-    summary="Transition incident lifecycle state",
-)
-async def transition_incident(
-    incident_id: str,
-    payload: IncidentTransitionRequest,
-    org: OrgDep,
-    current_user: RequireOperatorDep,
-    db: DatabaseDep,
-) -> IncidentResponse:
-    """
-    Safely transitions an incident through its lifecycle state machine.
-    Enforces strict resolution verification:
-    - An incident cannot be marked resolved simply because a recovery command executed.
-    - Successful recovery requires a successful health verification.
-    - Failed verification keeps the incident unresolved.
-    - Failed recovery can be escalated.
-    - Manual sign-off is separately recorded and cannot falsely claim that recovery succeeded.
-    - Every transition has an auditable actor, timestamp, previous state, new state, and reason.
-    """
-    stmt = (
-        select(Incident)
-        .options(selectinload(Incident.evidence), selectinload(Incident.events))
-        .where(
-            Incident.id == incident_id,
-            Incident.organization_id == org.id,
-        )
-    )
-    result = await db.execute(stmt)
-    incident = result.scalar_one_or_none()
-
-    if not incident:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Incident '{incident_id}' was not found in this organization.",
-        )
-
-    updated_incident = await IncidentStateMachine.transition(
-        db=db,
-        incident=incident,
-        target_status=payload.target_status,
-        reason=payload.reason,
-        user=current_user,
-        is_manual_signoff=payload.is_manual_signoff,
-    )
-
-    return format_incident_response(updated_incident)
-
-
 @router.get(
     "/{incident_id}/report",
     summary="Download incident post-mortem PDF or JSON report",
@@ -406,3 +360,148 @@ async def download_incident_report(
             "Content-Length": str(len(pdf_bytes)),
         },
     )
+
+
+@router.post(
+    "/{incident_id}/transition",
+    response_model=IncidentResponse,
+    summary="Advance incident lifecycle status (Operator or Admin)",
+)
+async def transition_incident_route(
+    incident_id: str,
+    payload: IncidentTransitionRequest,
+    org: OrgDep,
+    current_user: RequireOperatorDep,
+    db: DatabaseDep,
+) -> IncidentResponse:
+    """
+    Safely transitions an incident through its lifecycle state machine.
+    Enforces strict resolution verification:
+    - An incident cannot be marked resolved simply because a recovery command executed.
+    - Successful recovery requires a successful health verification.
+    - Failed verification keeps the incident unresolved.
+    - Failed recovery can be escalated.
+    - Manual sign-off is separately recorded and cannot falsely claim that recovery succeeded.
+    - Every transition has an auditable actor, timestamp, previous state, new state, and reason.
+    """
+    stmt = (
+        select(Incident)
+        .options(
+            selectinload(Incident.evidence),
+            selectinload(Incident.events),
+            selectinload(Incident.recovery_actions),
+            selectinload(Incident.transitions),
+        )
+        .where(
+            Incident.id == incident_id,
+            Incident.organization_id == org.id,
+        )
+    )
+    result = await db.execute(stmt)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident '{incident_id}' was not found in this organization.",
+        )
+
+    target_status = payload.get_target_status()
+    is_manual = payload.get_manual_signoff()
+    is_phase13_1_call = payload.target_status is not None
+
+    if is_phase13_1_call:
+        try:
+            updated_incident = await IncidentStateMachine.transition(
+                db=db,
+                incident=incident,
+                target_status=target_status,
+                reason=payload.reason,
+                user=current_user,
+                is_manual_signoff=is_manual,
+            )
+            return format_incident_response(updated_incident)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e),
+            )
+    else:
+        try:
+            updated_incident = await incident_state_machine.transition_incident(
+                db=db,
+                incident_id=incident_id,
+                organization_id=org.id,
+                target_status=target_status,
+                actor_id=current_user.id,
+                actor_email=current_user.email,
+                actor_role=current_user.role,
+                reason=payload.reason,
+                evidence_id=payload.evidence_id,
+                sign_off=is_manual,
+            )
+
+            # Reload incident with relations
+            stmt_reload = (
+                select(Incident)
+                .options(selectinload(Incident.evidence), selectinload(Incident.events))
+                .where(Incident.id == incident_id)
+            )
+            res = await db.execute(stmt_reload)
+            refreshed = res.scalar_one()
+
+            return format_incident_response(refreshed)
+
+        except InvalidIncidentTransitionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e),
+            )
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(e),
+            )
+
+
+@router.get(
+    "/{incident_id}/transitions",
+    response_model=List[IncidentTransitionResponse],
+    summary="List audit history of incident lifecycle transitions",
+)
+async def get_incident_transitions(
+    incident_id: str,
+    org: OrgDep,
+    db: DatabaseDep,
+) -> List[IncidentTransitionResponse]:
+    """
+    Returns complete chronological history of state mutations, actors, reasons, and evidence.
+    """
+    stmt = (
+        select(IncidentTransition)
+        .where(
+            IncidentTransition.incident_id == incident_id,
+            IncidentTransition.organization_id == org.id,
+        )
+        .order_by(desc(IncidentTransition.created_at))
+    )
+    res = await db.execute(stmt)
+    records = res.scalars().all()
+
+    return [
+        IncidentTransitionResponse(
+            id=str(r.id),
+            incident_id=r.incident_id,
+            actor_email=r.actor_email,
+            actor_role=r.actor_role,
+            previous_state=r.previous_state,
+            new_state=r.new_state,
+            reason=r.reason,
+            evidence_id=r.evidence_id,
+            sign_off=r.sign_off,
+            created_at=r.created_at.strftime("%Y-%m-%d %H:%M:%S UTC"),
+        )
+        for r in records
+    ]
