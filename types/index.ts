@@ -83,7 +83,8 @@ export interface AnalyticsSummary {
   detectionLatencySeconds: number
   recoveryDurationMinutes: number
   recoverySuccessRate: number
-  falsePositiveRate: number
+  falsePositiveRate: number | null
+  operatorRejectionRate?: number
   availability: number
   incidentCount: number
   history: Array<{ date: string; incidents: number; recoveries: number; availability: number }>

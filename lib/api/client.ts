@@ -73,6 +73,7 @@ export function setStoredUser(user: AuthUser | null): void {
 type ResponseShape = {
   strings?: readonly string[]
   numbers?: readonly string[]
+  nullableNumbers?: readonly string[]
   booleans?: readonly string[]
 }
 
@@ -271,6 +272,13 @@ function assertShape(value: unknown, resource: string, shape: ResponseShape): Re
   for (const field of shape.numbers ?? []) {
     if (typeof record[field] !== 'number' || !Number.isFinite(record[field])) {
       throw new ApiError(`The ${resource} response is missing a valid ${field}.`, 502)
+    }
+  }
+  for (const field of shape.nullableNumbers ?? []) {
+    if (record[field] !== null && record[field] !== undefined) {
+      if (typeof record[field] !== 'number' || !Number.isFinite(record[field])) {
+        throw new ApiError(`The ${resource} response is missing a valid ${field}.`, 502)
+      }
     }
   }
   for (const field of shape.booleans ?? []) {

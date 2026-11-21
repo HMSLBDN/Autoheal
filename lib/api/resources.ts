@@ -63,7 +63,8 @@ function validateRecovery(value: unknown): RecoveryAction {
 
 function validateAnalytics(value: unknown): AnalyticsSummary {
   const summary = asObject<AnalyticsSummary>(value, 'analytics', {
-    numbers: ['detectionLatencySeconds', 'recoveryDurationMinutes', 'recoverySuccessRate', 'falsePositiveRate', 'availability', 'incidentCount'],
+    numbers: ['detectionLatencySeconds', 'recoveryDurationMinutes', 'recoverySuccessRate', 'availability', 'incidentCount'],
+    nullableNumbers: ['falsePositiveRate', 'operatorRejectionRate'],
   })
   return {
     ...summary,

@@ -61,13 +61,42 @@ async def get_analytics_summary(
     total_terminal = sum(1 for r in recoveries if r.status in ["completed", "failed", "rejected"])
     success_rate = round((completed_count / total_terminal * 100), 1) if total_terminal > 0 else 94.2
 
-    # Actual false positive rate: rejected actions or false alerts
-    false_positive_rate = round((rejected_count / total_terminal * 100), 1) if total_terminal > 0 else 2.1
+    # Operator recovery rejection rate: reported strictly separately from detection accuracy
+    operator_rejection_rate = round((rejected_count / total_terminal * 100), 1) if total_terminal > 0 else 0.0
 
     durations = [r.duration_seconds for r in recoveries if r.duration_seconds is not None]
     avg_duration_min = round((sum(durations) / len(durations) / 60), 1) if durations else 6.4
 
-    # 4. Actual detection latency calculated from audit logs or incident records
+    # 4. Mathematically Rigorous Detection Classification & False-Positive Calculation:
+    # - True Positive (TP): unhealthy observation correctly generates an incident
+    # - False Positive (FP): healthy observation incorrectly generates an incident
+    # - True Negative (TN): healthy observation correctly generates no incident
+    # - False Negative (FN): unhealthy observation fails to generate an incident
+    # False-positive rate = FP / (FP + TN)
+    all_inc_stmt = select(Incident).where(Incident.organization_id == org.id)
+    all_inc_res = await db.execute(all_inc_stmt)
+    all_incidents = all_inc_res.scalars().all()
+
+    fp_count = sum(1 for inc in all_incidents if inc.error_rate < inc.threshold)
+    tp_count = sum(1 for inc in all_incidents if inc.error_rate >= inc.threshold)
+
+    svc_stmt = select(Service).where(Service.organization_id == org.id)
+    svc_res = await db.execute(svc_stmt)
+    services = svc_res.scalars().all()
+
+    active_inc_svc_ids = {
+        inc.service_id for inc in all_incidents if inc.status in ["open", "investigating", "recovering"]
+    }
+    tn_count = sum(1 for s in services if s.status == "healthy" and s.id not in active_inc_svc_ids)
+
+    healthy_observations = fp_count + tn_count
+    if healthy_observations > 0:
+        false_positive_rate = round((fp_count / healthy_observations) * 100, 2)
+    else:
+        # If there are insufficient healthy observation windows, report as unavailable (None)
+        false_positive_rate = None
+
+    # 5. Actual detection latency calculated from audit logs or incident records
     detection_latency = 42.0
     fault_logs_stmt = (
         select(AuditLog.created_at)
@@ -119,6 +148,7 @@ async def get_analytics_summary(
         recovery_duration_minutes=avg_duration_min,
         recovery_success_rate=success_rate,
         false_positive_rate=false_positive_rate,
+        operator_rejection_rate=operator_rejection_rate,
         availability=availability_val,
         incident_count=inc_count,
         history=history,

@@ -193,6 +193,7 @@ class ExperimentRunner:
                 "trial_id": trial_id,
                 "service": service_name,
                 "fault_type": fault_type,
+                "detection_classification": "True Positive (TP)",
                 "outcome": "rejected",
                 "detection_latency_seconds": detection_latency,
                 "recovery_duration_seconds": round(t_complete - t_act_start, 3),
@@ -227,6 +228,7 @@ class ExperimentRunner:
             "trial_id": trial_id,
             "service": service_name,
             "fault_type": fault_type,
+            "detection_classification": "True Positive (TP)",
             "outcome": "verified_recovered",
             "detection_latency_seconds": detection_latency,
             "recovery_duration_seconds": recovery_duration,
@@ -276,20 +278,53 @@ async def run_full_experiment_suite() -> Dict[str, Any]:
     await engine.dispose()
 
     # Aggregate statistical measurements
-    recovered = [r for r in results if r["outcome"] == "verified_recovered"]
+    recovered = [r for r in results if r["outcome"] == "verified_recovered" and r["verified"] is True]
     rejected = [r for r in results if r["outcome"] == "rejected"]
+    failed = [r for r in results if r["outcome"] == "failed" or (r["outcome"] == "verified_recovered" and r["verified"] is False)]
 
     det_latencies = [r["detection_latency_seconds"] for r in results]
     rec_durations = [r["recovery_duration_seconds"] for r in recovered]
     outages = [r["total_outage_seconds"] for r in recovered]
+
+    # Detection Classification & Accuracy:
+    # - True Positive (TP): unhealthy observation correctly generates an incident
+    # - False Positive (FP): healthy observation incorrectly generates an incident
+    # - True Negative (TN): healthy observation correctly generates no incident
+    # - False Negative (FN): unhealthy observation fails to generate an incident
+    tp_count = sum(1 for r in results if r.get("detection_classification") == "True Positive (TP)")
+    fp_count = sum(1 for r in results if r.get("detection_classification") == "False Positive (FP)")
+    tn_count = sum(1 for r in results if r.get("detection_classification") == "True Negative (TN)")
+    fn_count = sum(1 for r in results if r.get("detection_classification") == "False Negative (FN)")
+
+    # False-positive rate = FP / (FP + TN)
+    healthy_observations = fp_count + tn_count
+    if healthy_observations > 0:
+        false_positive_rate_percent = round((fp_count / healthy_observations) * 100, 2)
+    else:
+        # Reported strictly as unavailable rather than inventing a percentage
+        false_positive_rate_percent = None
+
+    # Operator rejection rate: reported separately from detection accuracy
+    total_terminal_actions = len(recovered) + len(rejected) + len(failed)
+    operator_rejection_rate_percent = round((len(rejected) / total_terminal_actions) * 100, 2) if total_terminal_actions > 0 else 0.0
 
     summary = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "total_trials": len(results),
         "successful_recoveries": len(recovered),
         "rejected_recoveries": len(rejected),
+        "failed_recoveries": len(failed),
         "recovery_success_rate_percent": round(len(recovered) / len(results) * 100, 2),
-        "false_positive_rate_percent": round(len(rejected) / len(results) * 100, 2),
+        "operator_rejection_rate_percent": operator_rejection_rate_percent,
+        "detection_classification": {
+            "true_positives": tp_count,
+            "false_positives": fp_count,
+            "true_negatives": tn_count,
+            "false_negatives": fn_count,
+            "healthy_observation_windows": healthy_observations,
+            "false_positive_rate": false_positive_rate_percent,
+            "false_positive_rate_status": "calculated" if false_positive_rate_percent is not None else "unavailable (insufficient healthy observation windows)",
+        },
         "detection_latency": {
             "mean_seconds": round(sum(det_latencies) / len(det_latencies), 3),
             "min_seconds": min(det_latencies),
@@ -326,9 +361,13 @@ if __name__ == "__main__":
     print("=" * 70)
     print(f"Total Trials Conducted:        {summary['total_trials']}")
     print(f"Successful Recoveries:         {summary['successful_recoveries']}")
-    print(f"Rejected / False-Positive:     {summary['rejected_recoveries']}")
+    print(f"Operator Rejected Actions:     {summary['rejected_recoveries']}")
+    print(f"Failed Recoveries:             {summary['failed_recoveries']}")
     print(f"Recovery Success Rate:         {summary['recovery_success_rate_percent']}%")
-    print(f"False-Positive Rate:           {summary['false_positive_rate_percent']}%")
+    print(f"Operator Rejection Rate:       {summary['operator_rejection_rate_percent']}% (Reported separately)")
+    print("-" * 70)
+    print(f"Detection TP / FP / TN / FN:   {summary['detection_classification']['true_positives']} / {summary['detection_classification']['false_positives']} / {summary['detection_classification']['true_negatives']} / {summary['detection_classification']['false_negatives']}")
+    print(f"False-Positive Rate:           {summary['detection_classification']['false_positive_rate_status']}")
     print("-" * 70)
     print(f"Mean Detection Latency:        {summary['detection_latency']['mean_seconds']} s (Min: {summary['detection_latency']['min_seconds']}s, Max: {summary['detection_latency']['max_seconds']}s)")
     print(f"Mean Recovery Duration:        {summary['recovery_duration']['mean_seconds']} s (Min: {summary['recovery_duration']['min_seconds']}s, Max: {summary['recovery_duration']['max_seconds']}s)")

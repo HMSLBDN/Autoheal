@@ -1,34 +1,45 @@
 {
-  "timestamp": "2026-11-21T04:20:52.993908+00:00",
+  "timestamp": "2026-11-21T04:43:13.593066+00:00",
   "total_trials": 5,
   "successful_recoveries": 4,
   "rejected_recoveries": 1,
+  "failed_recoveries": 0,
   "recovery_success_rate_percent": 80.0,
-  "false_positive_rate_percent": 20.0,
+  "operator_rejection_rate_percent": 20.0,
+  "detection_classification": {
+    "true_positives": 5,
+    "false_positives": 0,
+    "true_negatives": 0,
+    "false_negatives": 0,
+    "healthy_observation_windows": 0,
+    "false_positive_rate": null,
+    "false_positive_rate_status": "unavailable (insufficient healthy observation windows)"
+  },
   "detection_latency": {
-    "mean_seconds": 1.56,
+    "mean_seconds": 1.583,
     "min_seconds": 1.354,
-    "max_seconds": 1.623
+    "max_seconds": 1.689
   },
   "recovery_duration": {
-    "mean_seconds": 0.07,
-    "min_seconds": 0.025,
-    "max_seconds": 0.092
+    "mean_seconds": 0.072,
+    "min_seconds": 0.022,
+    "max_seconds": 0.095
   },
   "total_outage_duration": {
-    "mean_seconds": 1.631,
-    "min_seconds": 1.445,
-    "max_seconds": 1.724
+    "mean_seconds": 1.64,
+    "min_seconds": 1.457,
+    "max_seconds": 1.717
   },
   "trials": [
     {
       "trial_id": 1,
       "service": "checkout-api",
       "fault_type": "http_500",
+      "detection_classification": "True Positive (TP)",
       "outcome": "verified_recovered",
       "detection_latency_seconds": 1.354,
-      "recovery_duration_seconds": 0.083,
-      "total_outage_seconds": 1.445,
+      "recovery_duration_seconds": 0.095,
+      "total_outage_seconds": 1.457,
       "incident_id": "INC-1001",
       "recovery_id": "REC-800",
       "verified": true
@@ -37,10 +48,11 @@
       "trial_id": 2,
       "service": "customer-web",
       "fault_type": "high_latency",
+      "detection_classification": "True Positive (TP)",
       "outcome": "verified_recovered",
-      "detection_latency_seconds": 1.623,
-      "recovery_duration_seconds": 0.08,
-      "total_outage_seconds": 1.715,
+      "detection_latency_seconds": 1.61,
+      "recovery_duration_seconds": 0.084,
+      "total_outage_seconds": 1.706,
       "incident_id": "INC-1002",
       "recovery_id": "REC-801",
       "verified": true
@@ -49,10 +61,11 @@
       "trial_id": 3,
       "service": "payments-api",
       "fault_type": "service_down",
+      "detection_classification": "True Positive (TP)",
       "outcome": "verified_recovered",
-      "detection_latency_seconds": 1.619,
-      "recovery_duration_seconds": 0.092,
-      "total_outage_seconds": 1.724,
+      "detection_latency_seconds": 1.58,
+      "recovery_duration_seconds": 0.089,
+      "total_outage_seconds": 1.68,
       "incident_id": "INC-1003",
       "recovery_id": "REC-802",
       "verified": true
@@ -61,10 +74,11 @@
       "trial_id": 4,
       "service": "checkout-api",
       "fault_type": "degraded",
+      "detection_classification": "True Positive (TP)",
       "outcome": "verified_recovered",
-      "detection_latency_seconds": 1.601,
-      "recovery_duration_seconds": 0.025,
-      "total_outage_seconds": 1.639,
+      "detection_latency_seconds": 1.682,
+      "recovery_duration_seconds": 0.022,
+      "total_outage_seconds": 1.717,
       "incident_id": "INC-1004",
       "recovery_id": "REC-803",
       "verified": true
@@ -73,10 +87,11 @@
       "trial_id": 5,
       "service": "customer-web",
       "fault_type": "http_500",
+      "detection_classification": "True Positive (TP)",
       "outcome": "rejected",
-      "detection_latency_seconds": 1.602,
+      "detection_latency_seconds": 1.689,
       "recovery_duration_seconds": 0.014,
-      "total_outage_seconds": 1.616,
+      "total_outage_seconds": 1.704,
       "incident_id": "INC-1005",
       "recovery_id": "REC-804",
       "verified": false
