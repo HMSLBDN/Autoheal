@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  ...(process.env.BUILD_STANDALONE === 'true' || process.platform !== 'win32'
+    ? { output: 'standalone' }
+    : {}),
   poweredByHeader: false,
   images: {
     unoptimized: true,

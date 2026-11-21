@@ -14,6 +14,7 @@ import { demoAgents, demoAnalytics, demoAnomalies, demoCorrelations, demoEvaluat
 import { useDashboardControls } from '@/components/dashboard/dashboard-shell'
 import { AgentsView, AnalyticsView, IncidentTable, IncidentDetailView, IntelligenceView, MonitoringView, OverviewView, RecoveryTable, ReportsView, ServiceDetailView, ServiceTable, SettingsView } from '@/components/dashboard/data-views'
 import { CanaryReleasesView, IncidentCollaborationPanel, NotificationsView, OperationsTimelineView } from '@/components/dashboard/enterprise-views'
+import { ExperimentsView } from '@/components/dashboard/experiment-views'
 import { ObservabilityCenterView, SecurityCenterView } from '@/components/dashboard/security-views'
 
 type DialogState = { title: string; description: string; confirmLabel?: string; onConfirm?: () => Promise<void> | void }
@@ -330,6 +331,17 @@ export function DashboardView() {
 
   if (page === 'analytics') {
     return <>{commonNotices}<AnalyticsView analytics={analytics} demoMode={demoMode} />{dialogLayer}{toastLayer}</>
+  }
+
+  if (page === 'experiments' || page === 'benchmarks') {
+    return (
+      <>
+        {commonNotices}
+        <ExperimentsView demoMode={demoMode} />
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'reports') {

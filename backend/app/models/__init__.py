@@ -55,6 +55,10 @@ from app.models.phase10 import (
     SecurityAuditEvent,
     AgentCertificate,
 )
+from app.models.experiment import (
+    Experiment,
+    ExperimentRun,
+)
 
 __all__ = [
     "Base",
@@ -101,4 +105,6 @@ __all__ = [
     "UserSession",
     "SecurityAuditEvent",
     "AgentCertificate",
+    "Experiment",
+    "ExperimentRun",
 ]

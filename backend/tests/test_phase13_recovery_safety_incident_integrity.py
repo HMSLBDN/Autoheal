@@ -91,11 +91,11 @@ def test_docker_adapter_blocks_unallowlisted_service():
         adapter._validate_service_name("unregistered_random_service")
 
 
-def test_kubernetes_adapter_fails_safe_when_disabled():
+@pytest.mark.asyncio
+async def test_kubernetes_adapter_fails_safe_when_disabled():
     """Verify Kubernetes adapter fails safe with simulation receipt when disabled."""
     k8s = ModularKubernetesAdapter(enabled=False)
-    import asyncio
-    res = asyncio.run(k8s.rollout_restart_deployment("default", "checkout-api"))
+    res = await k8s.rollout_restart_deployment("default", "checkout-api")
     assert res["status"] == "simulated"
     assert "disabled by default" in res["message"]
 

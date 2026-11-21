@@ -652,3 +652,118 @@ export interface IncidentTransitionAudit {
   created_at: string
 }
 
+// Phase 14 Experiment & Benchmark Interfaces
+export type ScenarioType =
+  | 'healthy_baseline'
+  | 'service_unavailable'
+  | 'high_error_rate'
+  | 'resource_exhaustion'
+  | 'repeated_alerts'
+  | 'verification_failure'
+  | 'recovery_verification_failure'
+  | 'unauthorized_recovery'
+  | 'unapproved_recovery'
+
+export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type EvidenceClassification = 'MEASURED' | 'CALCULATED' | 'SYNTHETIC' | 'SIMULATED'
+
+export interface MetricDistribution {
+  min: number | null
+  max: number | null
+  mean: number | null
+  median: number | null
+  std_dev: number | null
+  p95: number | null
+  sample_count: number
+  small_sample_size: boolean
+  unit: string
+  classification: EvidenceClassification
+}
+
+export interface ExperimentRun {
+  id: string
+  experiment_id: string
+  run_number: number
+  status: ExperimentStatus
+  recovery_enabled: boolean
+  seed: number
+  fault_injected_at?: string | null
+  detected_at?: string | null
+  recovery_started_at?: string | null
+  recovery_completed_at?: string | null
+  health_restored_at?: string | null
+  detection_latency_ms?: number | null
+  recovery_duration_ms?: number | null
+  total_outage_duration_ms?: number | null
+  recovery_attempted: boolean
+  recovery_verified: boolean
+  recovery_success: boolean
+  is_false_positive: boolean
+  safety_compliant: boolean
+  escalated: boolean
+  incident_id?: string | null
+  recovery_action_id?: string | null
+  evidence_classification: EvidenceClassification
+  telemetry_samples: Array<Record<string, any>>
+  execution_log: Array<Record<string, any>>
+  error_message?: string | null
+  started_at?: string | null
+  completed_at?: string | null
+  created_at: string
+}
+
+export interface Experiment {
+  id: string
+  organization_id: string
+  created_by_user_id?: string | null
+  name: string
+  description: string
+  scenario_type: ScenarioType
+  execution_mode: string
+  recovery_enabled: boolean
+  target_service_id: string
+  number_of_runs: number
+  random_seed: number
+  configuration: Record<string, any>
+  test_conditions: Record<string, any>
+  status: ExperimentStatus
+  started_at?: string | null
+  completed_at?: string | null
+  results_summary: Record<string, any>
+  runs_count: number
+  runs?: ExperimentRun[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ExperimentAnalytics {
+  experiment_id: string
+  scenario_type: string
+  recovery_enabled: boolean
+  total_runs: number
+  completed_runs: number
+  detection_latency: MetricDistribution
+  recovery_duration: MetricDistribution
+  total_outage_duration: MetricDistribution
+  recovery_success_rate: number
+  false_positive_rate: number
+  safety_compliance_rate: number
+  escalation_rate: number
+  evidence_classification: EvidenceClassification
+  sample_size_warning?: string | null
+}
+
+export interface ExperimentComparison {
+  scenario_type: string
+  random_seed: number
+  enabled_experiment?: ExperimentAnalytics | null
+  disabled_experiment?: ExperimentAnalytics | null
+  outage_reduction_ms?: number | null
+  outage_reduction_percentage?: number | null
+  mttr_improvement_percentage?: number | null
+  is_statistically_significant: boolean
+  confidence_note: string
+  evidence_classification: EvidenceClassification
+}
+
+

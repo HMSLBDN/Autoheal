@@ -5,6 +5,10 @@ import type {
   DeploymentImpact,
   EscalationEvent,
   EscalationPolicy,
+  Experiment,
+  ExperimentAnalytics,
+  ExperimentComparison,
+  ExperimentRun,
   IdentityProvider,
   Incident,
   IncidentAnalysis,
@@ -779,5 +783,60 @@ export const sloApi = {
     return apiRequest<SLOMetricItem[]>(`/api/v1/slo/metrics?period=${encodeURIComponent(period)}`, { signal })
   },
 }
+
+export const experimentsApi = {
+  async list(scenario?: string, status?: string, signal?: AbortSignal): Promise<Experiment[]> {
+    const params = new URLSearchParams()
+    if (scenario) params.set('scenario_type', scenario)
+    if (status) params.set('status', status)
+    const qs = params.toString() ? `?${params.toString()}` : ''
+    return apiRequest<Experiment[]>(`/api/v1/experiments${qs}`, { signal })
+  },
+  async get(id: string, signal?: AbortSignal): Promise<Experiment> {
+    return apiRequest<Experiment>(`/api/v1/experiments/${encodeURIComponent(id)}`, { signal })
+  },
+  async create(payload: {
+    name: string
+    description?: string
+    scenario_type: string
+    recovery_enabled?: boolean
+    target_service_id?: string
+    number_of_runs?: number
+    random_seed?: number
+  }): Promise<Experiment> {
+    return apiRequest<Experiment>('/api/v1/experiments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async start(id: string): Promise<Experiment> {
+    return apiRequest<Experiment>(`/api/v1/experiments/${encodeURIComponent(id)}/start`, {
+      method: 'POST',
+    })
+  },
+  async cancel(id: string): Promise<Experiment> {
+    return apiRequest<Experiment>(`/api/v1/experiments/${encodeURIComponent(id)}/cancel`, {
+      method: 'POST',
+    })
+  },
+  async getRuns(id: string, signal?: AbortSignal): Promise<ExperimentRun[]> {
+    return apiRequest<ExperimentRun[]>(`/api/v1/experiments/${encodeURIComponent(id)}/runs`, { signal })
+  },
+  async getAnalytics(id: string, signal?: AbortSignal): Promise<ExperimentAnalytics> {
+    return apiRequest<ExperimentAnalytics>(`/api/v1/experiments/${encodeURIComponent(id)}/analytics`, { signal })
+  },
+  async compare(id: string, controlId?: string, signal?: AbortSignal): Promise<ExperimentComparison> {
+    const qs = controlId ? `?control_experiment_id=${encodeURIComponent(controlId)}` : ''
+    return apiRequest<ExperimentComparison>(`/api/v1/experiments/${encodeURIComponent(id)}/compare${qs}`, { signal })
+  },
+  async downloadReportPdf(id: string): Promise<Blob> {
+    return apiBlob(`/api/v1/experiments/${encodeURIComponent(id)}/report?format=pdf`)
+  },
+  async downloadReportJson(id: string): Promise<any> {
+    return apiRequest<any>(`/api/v1/experiments/${encodeURIComponent(id)}/report?format=json`)
+  },
+}
+
 
 

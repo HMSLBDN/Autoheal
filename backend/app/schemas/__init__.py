@@ -22,6 +22,14 @@ from app.schemas.alert import (
     AlertWebhookResponse,
 )
 from app.schemas.analytics import AnalyticsSummaryResponse, AnalyticsHistoryPoint
+from app.schemas.experiment import (
+    ExperimentCreateRequest,
+    ExperimentResponse,
+    ExperimentRunResponse,
+    ExperimentAnalyticsResponse,
+    ExperimentComparisonResponse,
+    MetricDistribution,
+)
 from app.schemas.auth import (
     AuthMessageResponse,
     ForgotPasswordRequest,
@@ -59,4 +67,10 @@ __all__ = [
     "RecoveryTriggerRequest",
     "AnalyticsSummaryResponse",
     "AnalyticsHistoryPoint",
+    "ExperimentCreateRequest",
+    "ExperimentResponse",
+    "ExperimentRunResponse",
+    "ExperimentAnalyticsResponse",
+    "ExperimentComparisonResponse",
+    "MetricDistribution",
 ]

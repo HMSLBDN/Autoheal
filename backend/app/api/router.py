@@ -14,6 +14,7 @@ from app.api.routes import (
     demo,
     escalations,
     events,
+    experiments,
     health,
     incidents,
     intelligence,
@@ -56,5 +57,6 @@ api_router.include_router(webhooks.router)
 api_router.include_router(collaboration.router)
 api_router.include_router(escalations.router)
 api_router.include_router(releases.router)
+api_router.include_router(experiments.router)
 api_router.include_router(timeline.router)
 api_router.include_router(demo.router)
