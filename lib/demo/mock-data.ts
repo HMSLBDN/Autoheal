@@ -391,3 +391,164 @@ export const demoIntelligenceOverview: IntelligenceOverview = {
   recentCorrelations: demoCorrelations,
 }
 
+
+
+import type {
+  EscalationPolicy,
+  IncidentComment,
+  NotificationChannel,
+  NotificationDelivery,
+  ReleaseEvaluation,
+  UnifiedTimeline,
+} from '@/types'
+
+export const demoNotificationChannels: NotificationChannel[] = [
+  {
+    id: 'chan-1',
+    organizationId: 'demo-org-1',
+    name: 'DevOps Slack Alerts (#incidents-prod)',
+    channelType: 'slack',
+    isEnabled: true,
+    configMasked: { webhook_url: 'https://example.com/webhook/slack-incidents', channel: '#incidents-prod' },
+    rateLimitPerMinute: 30,
+    createdAt: '2026-11-20T10:00:00Z',
+    updatedAt: '2026-11-20T10:00:00Z',
+  },
+  {
+    id: 'chan-2',
+    organizationId: 'demo-org-1',
+    name: 'SRE On-Call Webhook (PagerDuty)',
+    channelType: 'webhook',
+    isEnabled: true,
+    configMasked: { target_url: 'https://events.pagerduty.com/v2/enqueue', secret_token: '********' },
+    rateLimitPerMinute: 60,
+    createdAt: '2026-11-20T10:05:00Z',
+    updatedAt: '2026-11-20T10:05:00Z',
+  },
+  {
+    id: 'chan-3',
+    organizationId: 'demo-org-1',
+    name: 'Executive Incident Digest (SMTP)',
+    channelType: 'email',
+    isEnabled: false,
+    configMasked: { smtp_host: 'smtp.sendgrid.net', recipients: 'sre-leadership@autoheal.io' },
+    rateLimitPerMinute: 10,
+    createdAt: '2026-11-20T10:10:00Z',
+    updatedAt: '2026-11-20T10:10:00Z',
+  },
+]
+
+export const demoNotificationDeliveries: NotificationDelivery[] = [
+  {
+    id: 'deliv-1',
+    organizationId: 'demo-org-1',
+    channelId: 'chan-1',
+    channelName: 'DevOps Slack Alerts (#incidents-prod)',
+    channelType: 'slack',
+    incidentId: 'INC-2841',
+    eventType: 'incident_created_critical',
+    idempotencyKey: 'idemp-8f921a',
+    payload: { title: 'Elevated API error rate on customer-web', severity: 'HIGH' },
+    status: 'delivered',
+    retryCount: 0,
+    maxRetries: 3,
+    providerResponseCode: 200,
+    deliveredAt: 'Today, 09:42:20',
+    createdAt: 'Today, 09:42:19',
+  },
+  {
+    id: 'deliv-2',
+    organizationId: 'demo-org-1',
+    channelId: 'chan-2',
+    channelName: 'SRE On-Call Webhook (PagerDuty)',
+    channelType: 'webhook',
+    incidentId: 'INC-2841',
+    eventType: 'incident_created_critical',
+    idempotencyKey: 'idemp-4b892f',
+    payload: { title: 'Elevated API error rate on customer-web', severity: 'HIGH' },
+    status: 'delivered',
+    retryCount: 0,
+    maxRetries: 3,
+    providerResponseCode: 202,
+    deliveredAt: 'Today, 09:42:21',
+    createdAt: 'Today, 09:42:19',
+  },
+]
+
+export const demoIncidentComments: IncidentComment[] = [
+  {
+    id: 'comm-1',
+    incidentId: 'INC-2841',
+    authorName: 'AutoHeal System',
+    authorRole: 'system',
+    commentType: 'status_change',
+    content: 'Incident detected by metric anomaly evaluator. 5xx rate crossed 1.0% SLA.',
+    createdAt: 'Today, 09:42:18',
+  },
+  {
+    id: 'comm-2',
+    incidentId: 'INC-2841',
+    authorName: 'Alex Chen',
+    authorRole: 'operator',
+    commentType: 'comment',
+    content: 'Acknowledged. Correlated with release-2026.11.08.3. Reviewing payment upstream latency.',
+    createdAt: 'Today, 09:44:02',
+  },
+]
+
+export const demoEscalationPolicies: EscalationPolicy[] = [
+  {
+    id: 'esc-pol-1',
+    organizationId: 'demo-org-1',
+    name: 'Tier-1 Production Incident Escalation',
+    severity: 'critical',
+    unacknowledgedTimeoutMinutes: 15,
+    maxEscalationLevel: 3,
+    rules: [
+      { level: 1, timeoutMinutes: 15, channelIds: ['chan-1'], targetRoles: ['operator'] },
+      { level: 2, timeoutMinutes: 30, channelIds: ['chan-2'], targetRoles: ['admin', 'sre-lead'] },
+    ],
+    quietHoursEnabled: true,
+    quietHoursStartUtc: '22:00',
+    quietHoursEndUtc: '06:00',
+    isActive: true,
+    createdAt: '2026-11-20T08:00:00Z',
+  },
+]
+
+export const demoReleaseEvaluations: ReleaseEvaluation[] = [
+  {
+    id: 'rel-eval-1',
+    organizationId: 'demo-org-1',
+    serviceId: 'svc-web',
+    serviceName: 'customer-web',
+    releaseTag: 'release-2026.11.08.3',
+    stage: 'rollback_recommended',
+    status: 'failed',
+    trafficPercentage: 10,
+    observationWindowMinutes: 30,
+    sampleCount: 6,
+    regressionDetected: true,
+    recommendation: 'rollback_recommended',
+    explanation: 'Canary regression detected for release release-2026.11.08.3 at 10% traffic. Error rate delta (+1.79%) exceeded threshold (+0.5%). Advisory recommendation: halt promotion.',
+    metrics: [
+      { metricName: 'error_rate', baselineValue: 0.05, canaryValue: 1.84, delta: 1.79, thresholdValue: 0.5, status: 'breach', evaluatedAt: '2026-11-21T09:45:00Z' },
+      { metricName: 'latency_ms', baselineValue: 142.0, canaryValue: 684.0, delta: 542.0, thresholdValue: 100.0, status: 'breach', evaluatedAt: '2026-11-21T09:45:00Z' },
+      { metricName: 'availability', baselineValue: 99.98, canaryValue: 99.72, delta: -0.26, thresholdValue: 99.9, status: 'breach', evaluatedAt: '2026-11-21T09:45:00Z' },
+    ],
+    evaluatedAt: 'Today, 09:45:00',
+    createdAt: 'Today, 09:45:00',
+  },
+]
+
+export const demoTimeline: UnifiedTimeline = {
+  totalEvents: 6,
+  items: [
+    { id: 't1', category: 'deployment', title: 'Deployment: release-2026.11.08.3', detail: 'Deployed to staging and 10% canary on customer-web', serviceName: 'customer-web', timestamp: '09:34:06' },
+    { id: 't2', category: 'alert', title: 'Telemetry Spike Alert', detail: 'customer-web HTTP 500 error rate spiked to 1.84%', serviceName: 'customer-web', severity: 'high', timestamp: '09:42:00' },
+    { id: 't3', category: 'incident', title: 'Incident Created: INC-2841', detail: 'Elevated API error rate detected on customer-web', serviceName: 'customer-web', severity: 'high', status: 'open', timestamp: '09:42:18' },
+    { id: 't4', category: 'notification', title: 'Notification Delivered', detail: 'Sent to DevOps Slack Alerts (#incidents-prod)', serviceName: 'customer-web', timestamp: '09:42:20' },
+    { id: 't5', category: 'ai_diagnosis', title: 'AI Root Cause Diagnosis', detail: 'Correlated with release-2026.11.08.3. Confidence 88%', serviceName: 'customer-web', timestamp: '09:43:02' },
+    { id: 't6', category: 'recovery', title: 'Advisory Rollback Proposed', detail: 'Action: Rollback to previous stable release (REC-611)', serviceName: 'customer-web', status: 'pending_approval', timestamp: '09:43:14' },
+  ],
+}

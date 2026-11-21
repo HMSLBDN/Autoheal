@@ -292,3 +292,178 @@ export interface IntelligenceOverview {
   preventiveRecommendations: PreventiveRecommendation[]
   recentCorrelations: IncidentCorrelationGroup[]
 }
+
+
+// ==============================================================================
+// Phase 9: Enterprise Integrations, Notifications, Release Intelligence & Timeline
+// ==============================================================================
+
+export type NotificationChannelType = 'email' | 'slack' | 'teams' | 'webhook'
+export type NotificationDeliveryStatus = 'pending' | 'processing' | 'delivered' | 'retrying' | 'failed' | 'permanently_failed' | 'disabled'
+
+export interface NotificationChannel {
+  id: string
+  organizationId: string
+  name: string
+  channelType: NotificationChannelType
+  isEnabled: boolean
+  configMasked: Record<string, any>
+  rateLimitPerMinute: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NotificationSubscription {
+  id: string
+  organizationId: string
+  channelId: string
+  eventType: string
+  minSeverity: Severity
+  isActive: boolean
+  createdAt: string
+}
+
+export interface NotificationDelivery {
+  id: string
+  organizationId: string
+  channelId: string
+  channelName: string
+  channelType: string
+  incidentId?: string | null
+  eventType: string
+  idempotencyKey: string
+  payload: Record<string, any>
+  status: NotificationDeliveryStatus
+  retryCount: number
+  maxRetries: number
+  providerResponseCode?: number | null
+  failureReason?: string | null
+  deliveredAt?: string | null
+  nextRetryAt?: string | null
+  createdAt: string
+}
+
+export interface WebhookEndpoint {
+  id: string
+  organizationId: string
+  name: string
+  targetUrl: string
+  isActive: boolean
+  events: string[]
+  timeoutSeconds: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WebhookDeliveryAttempt {
+  id: string
+  deliveryId: string
+  eventType: string
+  payload: Record<string, any>
+  signatureHeader: string
+  responseStatusCode?: number | null
+  status: string
+  errorMessage?: string | null
+  durationMs: number
+  createdAt: string
+}
+
+export type IncidentCommentType = 'comment' | 'internal_note' | 'status_change' | 'escalation' | 'resolution_summary'
+
+export interface IncidentComment {
+  id: string
+  incidentId: string
+  authorName: string
+  authorRole: string
+  commentType: IncidentCommentType
+  content: string
+  createdAt: string
+}
+
+export interface IncidentAssignment {
+  id: string
+  incidentId: string
+  assignedToName: string
+  assignedByName: string
+  assignedAt: string
+  isActive: boolean
+}
+
+export interface EscalationLevelRule {
+  level: number
+  timeoutMinutes: number
+  channelIds: string[]
+  targetRoles: string[]
+}
+
+export interface EscalationPolicy {
+  id: string
+  organizationId: string
+  name: string
+  severity: Severity
+  unacknowledgedTimeoutMinutes: number
+  maxEscalationLevel: number
+  rules: EscalationLevelRule[]
+  quietHoursEnabled: boolean
+  quietHoursStartUtc?: string | null
+  quietHoursEndUtc?: string | null
+  isActive: boolean
+  createdAt: string
+}
+
+export interface EscalationEvent {
+  id: string
+  policyId: string
+  incidentId: string
+  escalationLevel: number
+  triggerReason: string
+  actionTaken: string
+  notifiedChannels: string[]
+  escalatedAt: string
+}
+
+export interface ReleaseEvaluationMetric {
+  metricName: string
+  baselineValue: number
+  canaryValue: number
+  delta: number
+  thresholdValue: number
+  status: 'pass' | 'warning' | 'breach'
+  evaluatedAt: string
+}
+
+export interface ReleaseEvaluation {
+  id: string
+  organizationId: string
+  serviceId: string
+  serviceName: string
+  releaseTag: string
+  stage: string
+  status: string
+  trafficPercentage: number
+  observationWindowMinutes: number
+  sampleCount: number
+  regressionDetected: boolean
+  recommendation: 'proceed' | 'pause' | 'rollback_recommended'
+  explanation: string
+  metrics: ReleaseEvaluationMetric[]
+  evaluatedAt: string
+  createdAt: string
+}
+
+export interface TimelineItem {
+  id: string
+  category: 'deployment' | 'alert' | 'incident' | 'ai_diagnosis' | 'recovery' | 'notification' | 'escalation'
+  title: string
+  detail: string
+  serviceName?: string | null
+  severity?: string | null
+  status?: string | null
+  timestamp: string
+  metadata?: Record<string, any>
+}
+
+export interface UnifiedTimeline {
+  totalEvents: number
+  items: TimelineItem[]
+}

@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Activity, AlertTriangle, BarChart3, Bell, Brain, ChevronDown, Clock3, Command, FileText, Gauge, LayoutDashboard, LogOut, Menu, Search, Server, Settings2, Workflow, X } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart3, Bell, Brain, ChevronDown, Clock3, Command, FileText, Gauge, GitBranch, History, LayoutDashboard, LogOut, Menu, Search, Server, Settings2, Workflow, X } from 'lucide-react'
 import { Brand } from '@/components/marketing/brand'
 import { AuthUser, getAccessToken, getStoredUser, isApiConfigured, isDemoModeExplicit } from '@/lib/api/client'
 import { authApi } from '@/lib/api/resources'
@@ -24,6 +24,9 @@ const navigation = [
   { label: 'Recovery Center', href: '/dashboard/recovery', icon: Workflow },
   { label: 'Recovery History', href: '/dashboard/history', icon: Clock3 },
   { label: 'Infrastructure Agents', href: '/dashboard/agents', icon: Server },
+  { label: 'Notifications & Alerts', href: '/dashboard/notifications', icon: Bell },
+  { label: 'Canary Releases', href: '/dashboard/releases', icon: GitBranch },
+  { label: 'Operations Timeline', href: '/dashboard/timeline', icon: History },
   { label: 'Monitoring', href: '/dashboard/monitoring', icon: Gauge },
   { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { label: 'Reports', href: '/dashboard/reports', icon: FileText },

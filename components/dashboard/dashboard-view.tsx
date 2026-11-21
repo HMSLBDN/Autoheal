@@ -13,6 +13,7 @@ import { useRealtimeEvents } from '@/lib/api/events'
 import { demoAgents, demoAnalytics, demoAnomalies, demoCorrelations, demoEvaluations, demoIncidents, demoIntelligenceOverview, demoPredictions, demoRecommendations, demoRecoveries, demoRiskScores, demoServices } from '@/lib/demo/mock-data'
 import { useDashboardControls } from '@/components/dashboard/dashboard-shell'
 import { AgentsView, AnalyticsView, IncidentTable, IncidentDetailView, IntelligenceView, MonitoringView, OverviewView, RecoveryTable, ReportsView, ServiceDetailView, ServiceTable, SettingsView } from '@/components/dashboard/data-views'
+import { CanaryReleasesView, IncidentCollaborationPanel, NotificationsView, OperationsTimelineView } from '@/components/dashboard/enterprise-views'
 
 type DialogState = { title: string; description: string; confirmLabel?: string; onConfirm?: () => Promise<void> | void }
 
@@ -297,7 +298,7 @@ export function DashboardView() {
   }
 
   if (page === 'incidents' && detailId) {
-    return <>{commonNotices}{heading(incidentForDetail?.id ?? 'Incident details', incidentForDetail?.title ?? (loading ? 'Loading incident details from the backend.' : 'This incident is not present in the available data.'), <Link className="dash-button" href="/dashboard/incidents"><ArrowDownRight size={12} />All incidents</Link>)}{incidentForDetail && <IncidentDetailView incident={incidentForDetail} onRequestRecovery={() => beginRecoveryRequest(incidentForDetail)} />}{!incidentForDetail && !loading && <div className="dash-card panel"><p className="panel-subtitle">The selected incident was not found.</p></div>}{dialogLayer}{toastLayer}</>
+    return <>{commonNotices}{heading(incidentForDetail?.id ?? 'Incident details', incidentForDetail?.title ?? (loading ? 'Loading incident details from the backend.' : 'This incident is not present in the available data.'), <Link className="dash-button" href="/dashboard/incidents"><ArrowDownRight size={12} />All incidents</Link>)}{incidentForDetail && <><IncidentDetailView incident={incidentForDetail} onRequestRecovery={() => beginRecoveryRequest(incidentForDetail)} /><IncidentCollaborationPanel incident={incidentForDetail} demoMode={demoMode} onIncidentUpdated={() => incidentsResource.mutate()} /></>}{!incidentForDetail && !loading && <div className="dash-card panel"><p className="panel-subtitle">The selected incident was not found.</p></div>}{dialogLayer}{toastLayer}</>
   }
 
   if (page === 'services') {
@@ -357,6 +358,18 @@ export function DashboardView() {
 
   if (page === 'agents') {
     return <>{commonNotices}{heading('Infrastructure agents', 'Monitor distributed host agents, mTLS credentials, and execution capabilities.', <span className="demo-label">{filteredAgents.length} agents registered</span>)}<AgentsView agents={filteredAgents} demoMode={demoMode} onRevoke={beginRevocation} busyId={busyId} />{dialogLayer}{toastLayer}</>
+  }
+
+  if (page === 'notifications') {
+    return <>{commonNotices}<NotificationsView demoMode={demoMode} />{dialogLayer}{toastLayer}</>
+  }
+
+  if (page === 'releases' || page === 'canary') {
+    return <>{commonNotices}<CanaryReleasesView demoMode={demoMode} />{dialogLayer}{toastLayer}</>
+  }
+
+  if (page === 'timeline') {
+    return <>{commonNotices}<OperationsTimelineView demoMode={demoMode} />{dialogLayer}{toastLayer}</>
   }
 
   if (page === 'settings') {

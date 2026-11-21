@@ -34,6 +34,19 @@ from app.models.intelligence import (
     PreventiveRecommendation,
     ModelEvaluationRecord,
 )
+from app.models.enterprise import (
+    NotificationChannel,
+    NotificationSubscription,
+    NotificationDelivery,
+    WebhookEndpoint,
+    WebhookDeliveryAttempt,
+    IncidentComment,
+    IncidentAssignment,
+    EscalationPolicy,
+    EscalationEvent,
+    ReleaseEvaluation,
+    ReleaseEvaluationMetric,
+)
 
 __all__ = [
     "Base",
@@ -62,4 +75,15 @@ __all__ = [
     "IncidentCorrelation",
     "PreventiveRecommendation",
     "ModelEvaluationRecord",
+    "NotificationChannel",
+    "NotificationSubscription",
+    "NotificationDelivery",
+    "WebhookEndpoint",
+    "WebhookDeliveryAttempt",
+    "IncidentComment",
+    "IncidentAssignment",
+    "EscalationPolicy",
+    "EscalationEvent",
+    "ReleaseEvaluation",
+    "ReleaseEvaluationMetric",
 ]

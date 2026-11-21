@@ -29,6 +29,8 @@ celery_app = Celery(
         "app.tasks.alerts",
         "app.tasks.diagnosis",
         "app.tasks.recovery",
+        "app.tasks.notifications",
+        "app.tasks.escalations",
     ],
 )
 
@@ -37,6 +39,8 @@ import app.tasks.monitoring
 import app.tasks.alerts
 import app.tasks.diagnosis
 import app.tasks.recovery
+import app.tasks.notifications
+import app.tasks.escalations
 
 celery_app.conf.update(
     task_serializer="json",
@@ -153,5 +157,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.monitoring.monitor_services_task",
         "schedule": float(settings.METRIC_SCRAPE_INTERVAL_SECONDS),
         "options": {"expires": 10},
+    },
+    "periodic-escalation-policy-evaluation": {
+        "task": "app.tasks.escalations.evaluate_escalation_policies_task",
+        "schedule": 60.0,
+        "options": {"expires": 30},
     },
 }

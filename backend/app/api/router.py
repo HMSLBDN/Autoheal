@@ -5,7 +5,27 @@ Assembles all sub-routers into /api/v1 router
 
 from fastapi import APIRouter
 
-from app.api.routes import agents, alerts, analytics, auth, demo, events, health, incidents, intelligence, policies, recoveries, services, settings
+from app.api.routes import (
+    agents,
+    alerts,
+    analytics,
+    auth,
+    collaboration,
+    demo,
+    escalations,
+    events,
+    health,
+    incidents,
+    intelligence,
+    notifications,
+    policies,
+    recoveries,
+    releases,
+    services,
+    settings,
+    timeline,
+    webhooks,
+)
 
 api_router = APIRouter()
 
@@ -21,4 +41,10 @@ api_router.include_router(analytics.router)
 api_router.include_router(intelligence.router)
 api_router.include_router(events.router)
 api_router.include_router(settings.router)
+api_router.include_router(notifications.router)
+api_router.include_router(webhooks.router)
+api_router.include_router(collaboration.router)
+api_router.include_router(escalations.router)
+api_router.include_router(releases.router)
+api_router.include_router(timeline.router)
 api_router.include_router(demo.router)

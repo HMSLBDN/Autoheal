@@ -2,21 +2,33 @@ import type {
   AnalyticsSummary,
   Anomaly,
   DeploymentImpact,
+  EscalationEvent,
+  EscalationPolicy,
   Incident,
   IncidentAnalysis,
+  IncidentAssignment,
+  IncidentComment,
   IncidentCorrelationGroup,
   IncidentEvent,
   IncidentEvidence,
   InfrastructureAgent,
   IntelligenceOverview,
   ModelEvaluationMetric,
+  NotificationChannel,
+  NotificationDelivery,
+  NotificationSubscription,
   Prediction,
   PreventiveRecommendation,
   RecoveryAction,
   RecoveryPolicy,
+  ReleaseEvaluation,
   Service,
   ServiceMetrics,
   ServiceRisk,
+  TimelineItem,
+  UnifiedTimeline,
+  WebhookDeliveryAttempt,
+  WebhookEndpoint,
 } from '@/types'
 import { apiBlob, apiRequest, asArray, asObject, ApiError, AuthUser, setAccessToken, setStoredUser } from './client'
 
@@ -364,5 +376,196 @@ export const intelligenceApi = {
   },
   async modelEvaluations(signal?: AbortSignal): Promise<ModelEvaluationMetric[]> {
     return apiRequest<ModelEvaluationMetric[]>('/api/v1/intelligence/model-evaluation', { signal })
+  },
+}
+
+
+export const notificationsApi = {
+  async listChannels(signal?: AbortSignal): Promise<NotificationChannel[]> {
+    return apiRequest<NotificationChannel[]>('/api/v1/notifications/channels', { signal })
+  },
+  async createChannel(payload: { name: string; channelType: string; isEnabled?: boolean; config: Record<string, any>; secretToken?: string; rateLimitPerMinute?: number }): Promise<NotificationChannel> {
+    return apiRequest<NotificationChannel>('/api/v1/notifications/channels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async updateChannel(id: string, payload: Partial<{ name: string; isEnabled: boolean; config: Record<string, any>; secretToken: string; rateLimitPerMinute: number }>): Promise<NotificationChannel> {
+    return apiRequest<NotificationChannel>(`/api/v1/notifications/channels/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async deleteChannel(id: string): Promise<void> {
+    await apiRequest<void>(`/api/v1/notifications/channels/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+  },
+  async testChannel(id: string, message?: string): Promise<{ deliveryId: string; status: string; detail: string }> {
+    return apiRequest<{ deliveryId: string; status: string; detail: string }>(`/api/v1/notifications/channels/${encodeURIComponent(id)}/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    })
+  },
+  async listSubscriptions(signal?: AbortSignal): Promise<NotificationSubscription[]> {
+    return apiRequest<NotificationSubscription[]>('/api/v1/notifications/subscriptions', { signal })
+  },
+  async createSubscription(payload: { channelId: string; eventType: string; minSeverity?: string; isActive?: boolean }): Promise<NotificationSubscription> {
+    return apiRequest<NotificationSubscription>('/api/v1/notifications/subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async listDeliveries(channelId?: string, status?: string, signal?: AbortSignal): Promise<NotificationDelivery[]> {
+    const params = new URLSearchParams()
+    if (channelId) params.append('channel_id', channelId)
+    if (status) params.append('status', status)
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return apiRequest<NotificationDelivery[]>(`/api/v1/notifications/deliveries${query}`, { signal })
+  },
+  async retryDelivery(deliveryId: string): Promise<NotificationDelivery> {
+    return apiRequest<NotificationDelivery>(`/api/v1/notifications/deliveries/${encodeURIComponent(deliveryId)}/retry`, {
+      method: 'POST',
+    })
+  },
+}
+
+export const webhooksApi = {
+  async listEndpoints(signal?: AbortSignal): Promise<WebhookEndpoint[]> {
+    return apiRequest<WebhookEndpoint[]>('/api/v1/webhooks/endpoints', { signal })
+  },
+  async createEndpoint(payload: { name: string; targetUrl: string; secretToken?: string; isActive?: boolean; events?: string[]; timeoutSeconds?: number }): Promise<WebhookEndpoint> {
+    return apiRequest<WebhookEndpoint>('/api/v1/webhooks/endpoints', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async getEndpoint(id: string, signal?: AbortSignal): Promise<WebhookEndpoint> {
+    return apiRequest<WebhookEndpoint>(`/api/v1/webhooks/endpoints/${encodeURIComponent(id)}`, { signal })
+  },
+  async updateEndpoint(id: string, payload: Partial<{ name: string; targetUrl: string; secretToken: string; isActive: boolean; events: string[]; timeoutSeconds: number }>): Promise<WebhookEndpoint> {
+    return apiRequest<WebhookEndpoint>(`/api/v1/webhooks/endpoints/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async deleteEndpoint(id: string): Promise<void> {
+    await apiRequest<void>(`/api/v1/webhooks/endpoints/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+  },
+  async listDeliveries(endpointId: string, signal?: AbortSignal): Promise<WebhookDeliveryAttempt[]> {
+    return apiRequest<WebhookDeliveryAttempt[]>(`/api/v1/webhooks/endpoints/${encodeURIComponent(endpointId)}/deliveries`, { signal })
+  },
+  async verifySignature(payload: { secret: string; signature: string; timestamp: string; payload: Record<string, any>; max_skew_seconds?: number }): Promise<{ is_valid: boolean; detail: string }> {
+    return apiRequest<{ is_valid: boolean; detail: string }>('/api/v1/webhooks/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+}
+
+export const collaborationApi = {
+  async listComments(incidentId: string, signal?: AbortSignal): Promise<IncidentComment[]> {
+    return apiRequest<IncidentComment[]>(`/api/v1/incidents/${encodeURIComponent(incidentId)}/comments`, { signal })
+  },
+  async createComment(incidentId: string, content: string, commentType = 'comment'): Promise<IncidentComment> {
+    return apiRequest<IncidentComment>(`/api/v1/incidents/${encodeURIComponent(incidentId)}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, commentType }),
+    })
+  },
+  async getAssignment(incidentId: string, signal?: AbortSignal): Promise<IncidentAssignment | null> {
+    return apiRequest<IncidentAssignment | null>(`/api/v1/incidents/${encodeURIComponent(incidentId)}/assignment`, { signal })
+  },
+  async assignIncident(incidentId: string, assignedToName: string, assignedToUserId?: string): Promise<IncidentAssignment> {
+    return apiRequest<IncidentAssignment>(`/api/v1/incidents/${encodeURIComponent(incidentId)}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assignedToName, assignedToUserId }),
+    })
+  },
+  async acknowledgeIncident(incidentId: string, note?: string): Promise<{ status: string; incident_id: string; incident_status: string; acknowledged_by: string }> {
+    return apiRequest<{ status: string; incident_id: string; incident_status: string; acknowledged_by: string }>(`/api/v1/incidents/${encodeURIComponent(incidentId)}/acknowledge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    })
+  },
+  async escalateIncident(incidentId: string, reason: string, targetLevel?: number): Promise<EscalationEvent> {
+    return apiRequest<EscalationEvent>(`/api/v1/incidents/${encodeURIComponent(incidentId)}/escalate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason, targetLevel }),
+    })
+  },
+}
+
+export const escalationsApi = {
+  async listPolicies(signal?: AbortSignal): Promise<EscalationPolicy[]> {
+    return apiRequest<EscalationPolicy[]>('/api/v1/escalations/policies', { signal })
+  },
+  async createPolicy(payload: Partial<EscalationPolicy>): Promise<EscalationPolicy> {
+    return apiRequest<EscalationPolicy>('/api/v1/escalations/policies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async getPolicy(id: string, signal?: AbortSignal): Promise<EscalationPolicy> {
+    return apiRequest<EscalationPolicy>(`/api/v1/escalations/policies/${encodeURIComponent(id)}`, { signal })
+  },
+  async updatePolicy(id: string, payload: Partial<EscalationPolicy>): Promise<EscalationPolicy> {
+    return apiRequest<EscalationPolicy>(`/api/v1/escalations/policies/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async deletePolicy(id: string): Promise<void> {
+    await apiRequest<void>(`/api/v1/escalations/policies/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+  },
+  async triggerEvaluation(): Promise<EscalationEvent[]> {
+    return apiRequest<EscalationEvent[]>('/api/v1/escalations/evaluate', {
+      method: 'POST',
+    })
+  },
+  async listEvents(incidentId?: string, signal?: AbortSignal): Promise<EscalationEvent[]> {
+    const query = incidentId ? `?incident_id=${encodeURIComponent(incidentId)}` : ''
+    return apiRequest<EscalationEvent[]>(`/api/v1/escalations/events${query}`, { signal })
+  },
+}
+
+export const releasesApi = {
+  async listEvaluations(serviceId?: string, signal?: AbortSignal): Promise<ReleaseEvaluation[]> {
+    const query = serviceId ? `?service_id=${encodeURIComponent(serviceId)}` : ''
+    return apiRequest<ReleaseEvaluation[]>(`/api/v1/releases/evaluations${query}`, { signal })
+  },
+  async evaluateCanary(payload: { serviceId: string; releaseTag: string; trafficPercentage?: number; observationWindowMinutes?: number; thresholds?: Record<string, number> }): Promise<ReleaseEvaluation> {
+    return apiRequest<ReleaseEvaluation>('/api/v1/releases/evaluate-canary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async getEvaluation(id: string, signal?: AbortSignal): Promise<ReleaseEvaluation> {
+    return apiRequest<ReleaseEvaluation>(`/api/v1/releases/evaluations/${encodeURIComponent(id)}`, { signal })
+  },
+}
+
+export const timelineApi = {
+  async getTimeline(serviceId?: string, signal?: AbortSignal): Promise<UnifiedTimeline> {
+    const query = serviceId ? `?serviceId=${encodeURIComponent(serviceId)}` : ''
+    return apiRequest<UnifiedTimeline>(`/api/v1/timeline${query}`, { signal })
   },
 }
