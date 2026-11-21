@@ -228,10 +228,10 @@ async def start_experiment(
             detail=f"Experiment '{experiment_id}' not found.",
         )
 
-    if experiment.status == "running":
+    if experiment.status in ("running", "completed"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Experiment '{experiment_id}' is already actively running.",
+            detail=f"Experiment '{experiment_id}' is already {experiment.status}. Create a new experiment to run another trial.",
         )
 
     # Execute

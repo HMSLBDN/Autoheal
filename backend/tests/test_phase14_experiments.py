@@ -638,3 +638,72 @@ async def test_20_research_report_json_export(db_session):
         assert "methodology" in report
         assert report["report_metadata"]["safety_mode"] == "RECOVERY_SIMULATION_MODE=true"
         assert len(report["runs"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_21_prevent_stale_rerun_on_completed_experiment(db_session):
+    """Verifies that an already completed experiment cannot be restarted, preventing stale result pollution."""
+    data = await get_phase14_test_data(db_session)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        create_res = await ac.post(
+            "/api/v1/experiments",
+            json={"name": "Immutable Completed Suite", "scenario_type": "healthy_baseline", "number_of_runs": 2},
+            headers={"Authorization": f"Bearer {data['operator_token']}"},
+        )
+        exp_id = create_res.json()["id"]
+
+        start_res = await ac.post(
+            f"/api/v1/experiments/{exp_id}/start",
+            headers={"Authorization": f"Bearer {data['operator_token']}"},
+        )
+        assert start_res.status_code == 200
+        assert start_res.json()["status"] == "completed"
+
+        # Re-start attempt must be rejected with 409 Conflict
+        rerun_res = await ac.post(
+            f"/api/v1/experiments/{exp_id}/start",
+            headers={"Authorization": f"Bearer {data['operator_token']}"},
+        )
+        assert rerun_res.status_code == 409
+        assert "already completed" in rerun_res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_22_audit_right_censored_control_and_evidence_tiers(db_session):
+    """Verifies that control outages are zero-variance right-censored at 60s and evidence tiers are accurate."""
+    data = await get_phase14_test_data(db_session)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        # Healthy baseline: SYNTHETIC tier
+        res_h = await ac.post(
+            "/api/v1/experiments",
+            json={"name": "Healthy Baseline Tier Check", "scenario_type": "healthy_baseline", "number_of_runs": 5, "random_seed": 42},
+            headers={"Authorization": f"Bearer {data['operator_token']}"},
+        )
+        h_id = res_h.json()["id"]
+        start_h = await ac.post(f"/api/v1/experiments/{h_id}/start", headers={"Authorization": f"Bearer {data['operator_token']}"})
+        h_summary = start_h.json()["results_summary"]
+        assert h_summary["detection_latency"]["classification"] == "SYNTHETIC"
+
+        # Service unavailable control: SIMULATED / CALCULATED tiers, right-censored at 60,000ms
+        res_c = await ac.post(
+            "/api/v1/experiments",
+            json={"name": "Control Censoring Check", "scenario_type": "service_unavailable", "recovery_enabled": False, "number_of_runs": 5, "random_seed": 42},
+            headers={"Authorization": f"Bearer {data['operator_token']}"},
+        )
+        c_id = res_c.json()["id"]
+        start_c = await ac.post(f"/api/v1/experiments/{c_id}/start", headers={"Authorization": f"Bearer {data['operator_token']}"})
+        c_summary = start_c.json()["results_summary"]
+        assert c_summary["total_outage_duration"]["mean"] == 60000.0
+        assert c_summary["total_outage_duration"]["std_dev"] == 0.0
+        assert c_summary["total_outage_duration"]["classification"] == "CALCULATED"
+
+        # Check run logs for right-censored flag
+        runs_res = await ac.get(f"/api/v1/experiments/{c_id}/runs", headers={"Authorization": f"Bearer {data['viewer_token']}"})
+        runs = runs_res.json()
+        assert len(runs) == 5
+        for r in runs:
+            censored_logs = [log for log in r["execution_log"] if log.get("is_right_censored")]
+            assert len(censored_logs) > 0
+

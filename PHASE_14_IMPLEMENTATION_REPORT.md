@@ -87,7 +87,7 @@ All operations strictly enforce `RECOVERY_SIMULATION_MODE=true` with zero Docker
 
 ### Phase 14.8 — Automated Pytest Verification Suite
 - **Suite (`backend/tests/test_phase14_experiments.py`):**
-  - 20 comprehensive unit, integration, and E2E test cases covering model creation, schema validation, all 8 scenarios, cancellation, metric math, comparator logic, RBAC, tenant isolation, and report generation.
+  - 22 comprehensive unit, integration, and E2E test cases covering model creation, schema validation, all 8 scenarios, cancellation, metric math, comparator logic, RBAC, tenant isolation, report generation, stale result protection, and right-censored control handling.
 
 ---
 

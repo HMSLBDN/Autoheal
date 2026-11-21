@@ -17,16 +17,20 @@ from app.services.experiment.metrics import calculate_distribution
 def build_experiment_analytics(experiment: Experiment) -> ExperimentAnalyticsResponse:
     """Computes aggregated statistical evaluation for a completed or running experiment."""
     runs = experiment.runs or []
-    completed_runs = [r for r in runs if r.status in ("completed", "failed")]
+    completed_runs = [r for r in runs if r.status == "completed"]
     n_completed = len(completed_runs)
 
     latencies = [r.detection_latency_ms for r in completed_runs if r.detection_latency_ms is not None]
     rec_durations = [r.recovery_duration_ms for r in completed_runs if r.recovery_duration_ms is not None]
     outages = [r.total_outage_duration_ms for r in completed_runs if r.total_outage_duration_ms is not None]
 
-    detection_dist = calculate_distribution(latencies, unit="ms", classification="MEASURED")
-    recovery_dist = calculate_distribution(rec_durations, unit="ms", classification="MEASURED")
-    outage_dist = calculate_distribution(outages, unit="ms", classification="MEASURED")
+    scenario = experiment.scenario_type
+    is_synthetic = (scenario == "healthy_baseline")
+    det_tier: EvidenceClassificationType = "SYNTHETIC" if is_synthetic else "SIMULATED"
+
+    detection_dist = calculate_distribution(latencies, unit="ms", classification=det_tier)
+    recovery_dist = calculate_distribution(rec_durations, unit="ms", classification="SIMULATED")
+    outage_dist = calculate_distribution(outages, unit="ms", classification="CALCULATED")
 
     # Success rate
     attempted_runs = [r for r in completed_runs if r.recovery_attempted]
@@ -121,8 +125,10 @@ def compare_experiments(
                 if diff_ms > (2 * se) if se > 0 else diff_ms > 0:
                     is_sig = True
                     confidence_note = (
-                        f"Statistically validated improvement: Autonomous recovery reduced mean outage duration by "
-                        f"{pct}% ({diff_ms:,.0f} ms reduction across N={n1} matched seeds, p < 0.05)."
+                        f"Descriptive benchmark: Autonomous recovery reduced mean outage duration by "
+                        f"{pct}% ({diff_ms:,.0f} ms reduction across N={n1} matched seeds, paired SE={se:.1f}ms vs 60s observation window). "
+                        f"Control baseline is right-censored at the 60,000 ms benchmark observation ceiling (zero control variance); "
+                        f"parametric p-values from unconstrained survival models are not claimed."
                     )
                 else:
                     confidence_note = (

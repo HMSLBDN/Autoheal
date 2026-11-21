@@ -39,8 +39,8 @@ Timeline ───┼───────────────────�
 - **Definition:** Total elapsed wall-clock duration during which the target service remained unavailable or in degraded performance before health verification passed.
 - **Formula:**
   $$T_{\text{outage}} = (Timestamp_{\text{health\_restored}} - Timestamp_{\text{fault\_injected}}) \times 1000 \quad [ms]$$
-- **Evidence Classification:** `CALCULATED`
-- **Control Timeout:** In control runs where autonomous recovery is disabled or verification fails, unmitigated outages default to the standard benchmark observation timeout window ($60,000\,ms$).
+- **Evidence Classification:** `CALCULATED` (from simulated timestamps)
+- **Control Timeout & Right-Censoring:** In control runs where autonomous recovery is disabled or verification fails, unmitigated outages default to the standard benchmark observation timeout window ($T_{\text{cutoff}} = 60,000\,ms$, $s = 0.0\,ms$). This represents a right-censored observation ceiling ($MTTR > 60\,s$), not an observed natural resolution.
 
 ---
 
@@ -86,7 +86,7 @@ For any scalar metric sample $X = \{x_1, x_2, \dots, x_N\}$:
 
 ---
 
-## 5. Comparative Improvement Formulas
+## 5. Comparative Improvement Formulas & Censoring Handling
 
 When comparing Recovery Enabled ($E$) against Recovery Disabled / Control ($D$):
 
@@ -95,5 +95,6 @@ When comparing Recovery Enabled ($E$) against Recovery Disabled / Control ($D$):
 - **Relative MTTR Improvement Percentage ($I_{\text{MTTR}}$):**
   $$I_{\text{MTTR}} = \left( \frac{\bar{T}_{\text{outage}, D} - \bar{T}_{\text{outage}, E}}{\bar{T}_{\text{outage}, D}} \right) \times 100\%$$
 - **Standard Error of Difference ($SE_{\text{diff}}$):**
-  $$SE_{\text{diff}} = \sqrt{\frac{s_E^2}{N_E} + \frac{s_D^2}{N_D}}$$
-- **Statistical Significance Rule:** An improvement is declared statistically significant if $N_E \ge 5$, $N_D \ge 5$, and $\Delta T > 2 \times SE_{\text{diff}}$ (approximate 95% confidence under Welch's unequal variances).
+  In matched-seed paired trials where the control group is bounded by the fixed observation timeout ($s_D = 0.0$):
+  $$SE_{\text{diff}} = \frac{s_E}{\sqrt{N_E}}$$
+- **Descriptive Benchmark Threshold:** An improvement relative to the observation ceiling is declared descriptively significant if $N_E \ge 5$, $N_D \ge 5$, and $\Delta T > 2 \times SE_{\text{diff}}$. Because the control group is right-censored at $60,000\,ms$, parametric p-values from unconstrained survival models are not claimed.

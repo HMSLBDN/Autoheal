@@ -80,6 +80,7 @@ def generate_experiment_json_report(experiment: Experiment) -> Dict[str, Any]:
             ],
             "limitations": [
                 "Simulated latencies reflect controlled distribution models rather than production noisy neighbors.",
+                "Control mode (recovery disabled) and unmitigated incidents are right-censored at the 60,000 ms observation window ceiling (zero control variance); parametric p-values are not claimed.",
                 "Sample sizes under N=5 are flagged as preliminary trends.",
             ],
         },
@@ -305,6 +306,7 @@ def generate_experiment_pdf_report(experiment: Experiment) -> bytes:
         "<b>Reproducibility:</b> All trials utilize deterministic pseudo-random seeds (seed = base_seed + run_number). "
         "<b>Safety Isolation:</b> RECOVERY_SIMULATION_MODE=true is strictly enforced; no container sockets, shell execution, "
         "or live production infrastructure was manipulated during evaluation.<br/>"
+        "<b>Right-Censoring:</b> Control baseline (recovery disabled) and unmitigated incidents are bounded by the 60,000 ms observation window ceiling.<br/>"
     )
     if analytics.sample_size_warning:
         method_text += f"<br/><font color='#dc2626'><b>Statistical Caution:</b> {analytics.sample_size_warning}</font>"

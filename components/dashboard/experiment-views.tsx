@@ -254,7 +254,7 @@ export function ExperimentsView({ demoMode }: { demoMode: boolean }) {
           mttr_improvement_percentage: 91.2,
           is_statistically_significant: true,
           confidence_note:
-            'Statistically validated improvement: Autonomous recovery reduced mean outage duration by 91.2% (54,735 ms reduction across N=5 matched seeds, p < 0.05).',
+            'Descriptive benchmark: Autonomous recovery reduced mean outage duration by 91.6% (54,939 ms reduction across N=5 matched seeds, paired SE=303.4ms vs 60s observation window). Control baseline is right-censored at 60,000 ms.',
           evidence_classification: 'SIMULATED',
         })
         return

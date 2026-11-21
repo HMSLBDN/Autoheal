@@ -10,7 +10,7 @@ import random
 from typing import Any, Dict, List, Optional, Tuple
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -135,7 +135,9 @@ class ExperimentRunner:
         execution_log: List[Dict[str, Any]] = []
 
         # Scenario Dispatch
+        evidence_tier = "SIMULATED"
         if scenario == "healthy_baseline":
+            evidence_tier = "SYNTHETIC"
             # Scenario 1: Healthy baseline — evaluate false-positive rate
             execution_log.append({
                 "event": "baseline_monitoring",
@@ -219,8 +221,9 @@ class ExperimentRunner:
                 total_outage_ms = 60000.0
                 execution_log.append({
                     "event": "recovery_disabled",
-                    "detail": "Autonomous remediation disabled; incident left unmitigated.",
+                    "detail": "Autonomous remediation disabled; incident unmitigated and right-censored at 60,000ms observation window.",
                     "total_outage_ms": total_outage_ms,
+                    "is_right_censored": True,
                     "timestamp": t_detect.isoformat(),
                 })
 
@@ -281,7 +284,8 @@ class ExperimentRunner:
 
             execution_log.append({
                 "event": "verification_failed",
-                "detail": "Post-recovery health check probe timed out; container unready.",
+                "detail": "Post-recovery health check probe timed out; container unready. Outage unmitigated and right-censored at 60,000ms observation window.",
+                "is_right_censored": True,
                 "timestamp": t_rec_end.isoformat(),
             })
             execution_log.append({
@@ -306,6 +310,8 @@ class ExperimentRunner:
                 "event": "authorization_evaluated",
                 "actor_role": "viewer",
                 "result": "HTTP 403 Forbidden — Recovery permission denied.",
+                "detail": "Action blocked; outage unmitigated and right-censored at 60,000ms observation window.",
+                "is_right_censored": True,
                 "safety_compliant": True,
                 "timestamp": t_detect.isoformat(),
             })
@@ -328,7 +334,8 @@ class ExperimentRunner:
                 "action": "restart_database_primary",
                 "requires_approval": True,
                 "status": "pending_approval",
-                "detail": "Action halted; awaiting cryptographically verified manual sign-off.",
+                "detail": "Action halted; awaiting cryptographically verified manual sign-off. Outage unmitigated and right-censored at 60,000ms observation window.",
+                "is_right_censored": True,
                 "timestamp": t_detect.isoformat(),
             })
 
@@ -359,6 +366,7 @@ class ExperimentRunner:
             "recovery_action_id": recovery_action_id,
             "telemetry_samples": telemetry,
             "execution_log": execution_log,
+            "evidence_classification": evidence_tier,
         }
 
     @classmethod
@@ -381,8 +389,12 @@ class ExperimentRunner:
         if not experiment:
             raise ValueError(f"Experiment '{experiment_id}' not found.")
 
-        if experiment.status == "running":
-            raise ValueError(f"Experiment '{experiment_id}' is already running.")
+        if experiment.status in ("running", "completed"):
+            raise ValueError(f"Experiment '{experiment_id}' is already {experiment.status}. Create a new experiment to run another trial.")
+
+        # Purge any previous/partial runs from prior interrupted runs to prevent stale result reuse
+        await db.execute(delete(ExperimentRun).where(ExperimentRun.experiment_id == experiment_id))
+        await db.commit()
 
         # Update experiment to running
         experiment.status = "running"
@@ -416,20 +428,27 @@ class ExperimentRunner:
                 db.add(run_record)
                 await db.commit()
 
-                # Execute Scenario
-                results = await cls.run_scenario_iteration(
-                    scenario=experiment.scenario_type,
-                    recovery_enabled=experiment.recovery_enabled,
-                    seed=run_seed,
-                    target_service=experiment.target_service_id,
-                )
+                try:
+                    # Execute Scenario
+                    results = await cls.run_scenario_iteration(
+                        scenario=experiment.scenario_type,
+                        recovery_enabled=experiment.recovery_enabled,
+                        seed=run_seed,
+                        target_service=experiment.target_service_id,
+                    )
 
-                # Update Run record
-                for k, v in results.items():
-                    setattr(run_record, k, v)
-                run_record.status = "completed"
-                run_record.completed_at = utc_now()
-                await db.commit()
+                    # Update Run record
+                    for k, v in results.items():
+                        setattr(run_record, k, v)
+                    run_record.status = "completed"
+                    run_record.completed_at = utc_now()
+                    await db.commit()
+                except Exception as run_err:
+                    logger.exception(f"Run {run_num} failed in experiment {experiment_id}: {run_err}")
+                    run_record.status = "failed"
+                    run_record.error_message = str(run_err)
+                    run_record.completed_at = utc_now()
+                    await db.commit()
 
             # Mark experiment completed or cancelled
             await db.refresh(experiment)

@@ -15,8 +15,8 @@
 | **Phase 14.1** | Persistent experiment & run models with tenant isolation | Schema inspection & Alembic migration `0009` | **ACCEPTED** |
 | **Phase 14.2** | Automated runner executing 8 deterministic scenarios with seed pinning | `test_phase14_experiments.py` (Scenarios 1–8) | **ACCEPTED** |
 | **Phase 14.3** | Performance metrics: latency, duration, outage, sample size awareness | Metric distribution unit tests ($N < 5$ vs $N \ge 5$) | **ACCEPTED** |
-| **Phase 14.4** | Analytics & comparative engine (Enabled vs Disabled) | Pairwise comparison tests ($p < 0.05$ threshold) | **ACCEPTED** |
-| **Phase 14.5** | Multi-tenant REST API with RBAC enforcement | Full API test suite (20 tests passed) | **ACCEPTED** |
+| **Phase 14.4** | Analytics & comparative engine (Enabled vs Disabled) | Pairwise comparison tests (paired standard error & right-censored control handling) | **ACCEPTED** |
+| **Phase 14.5** | Multi-tenant REST API with RBAC enforcement | Full API test suite (22 tests passed) | **ACCEPTED** |
 | **Phase 14.6** | Frontend experiments dashboard matching navy/cyan/violet theme | TypeScript typecheck (`tsc`), ESLint, Webpack build | **ACCEPTED** |
 | **Phase 14.7** | Downloadable PDF and JSON research benchmark reports | ReportLab PDF `%PDF` byte validation & JSON schemas | **ACCEPTED** |
 | **Phase 14.8** | Comprehensive automated test suite | Pytest test suite covering all phase features | **ACCEPTED** |
