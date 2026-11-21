@@ -5,14 +5,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import type { LucideIcon } from 'lucide-react'
-import { Activity, ArrowDownRight, CheckCircle2, Clock3, RefreshCw, ShieldCheck } from 'lucide-react'
-import type { AnalyticsSummary, Incident, RecoveryAction, Service } from '@/types'
+import { Activity, ArrowDownRight, CheckCircle2, Clock3, RefreshCw, Server, ShieldCheck } from 'lucide-react'
+import type { AnalyticsSummary, Incident, InfrastructureAgent, RecoveryAction, Service } from '@/types'
 import { isApiConfigured, isDemoMode } from '@/lib/api/client'
-import { analyticsApi, healthApi, incidentsApi, recoveriesApi, servicesApi } from '@/lib/api/resources'
+import { agentsApi, analyticsApi, healthApi, incidentsApi, recoveriesApi, servicesApi } from '@/lib/api/resources'
 import { useRealtimeEvents } from '@/lib/api/events'
-import { demoAnalytics, demoIncidents, demoRecoveries, demoServices } from '@/lib/demo/mock-data'
+import { demoAgents, demoAnalytics, demoIncidents, demoRecoveries, demoServices } from '@/lib/demo/mock-data'
 import { useDashboardControls } from '@/components/dashboard/dashboard-shell'
-import { AnalyticsView, IncidentTable, IncidentDetailView, MonitoringView, OverviewView, RecoveryTable, ReportsView, ServiceDetailView, ServiceTable, SettingsView } from '@/components/dashboard/data-views'
+import { AgentsView, AnalyticsView, IncidentTable, IncidentDetailView, MonitoringView, OverviewView, RecoveryTable, ReportsView, ServiceDetailView, ServiceTable, SettingsView } from '@/components/dashboard/data-views'
 
 type DialogState = { title: string; description: string; confirmLabel?: string; onConfirm?: () => Promise<void> | void }
 
@@ -79,6 +79,7 @@ export function DashboardView() {
   const recoveriesResource = useSWR<RecoveryAction[]>(demoMode ? 'demo-recoveries' : 'recoveries', () => demoMode ? Promise.resolve(demoRecoveries) : recoveriesApi.list(), { fallbackData: demoMode ? demoRecoveries : undefined, revalidateOnFocus: false })
   const analyticsResource = useSWR<AnalyticsSummary>(demoMode ? 'demo-analytics' : 'analytics', () => demoMode ? Promise.resolve(demoAnalytics) : analyticsApi.summary(), { fallbackData: demoMode ? demoAnalytics : undefined, revalidateOnFocus: false })
   const healthResource = useSWR<{ status: string }>(demoMode ? 'demo-health' : 'backend-health', () => demoMode ? Promise.resolve({ status: 'demo' }) : healthApi.get(), { fallbackData: demoMode ? { status: 'demo' } : undefined, revalidateOnFocus: false })
+  const agentsResource = useSWR<InfrastructureAgent[]>(demoMode ? 'demo-agents' : 'agents', () => demoMode ? Promise.resolve(demoAgents) : agentsApi.list(), { fallbackData: demoMode ? demoAgents : undefined, revalidateOnFocus: false })
 
   // Real-time Server-Sent Events (SSE) updates
   useRealtimeEvents({
@@ -109,19 +110,21 @@ export function DashboardView() {
   const services = useMemo(() => servicesResource.data ?? [], [servicesResource.data])
   const incidents = useMemo(() => incidentsResource.data ?? [], [incidentsResource.data])
   const recoveries = useMemo(() => recoveriesResource.data ?? [], [recoveriesResource.data])
+  const agents = useMemo(() => agentsResource.data ?? [], [agentsResource.data])
   const analytics = analyticsResource.data
-  const apiErrors = [servicesResource.error, incidentsResource.error, recoveriesResource.error, analyticsResource.error, healthResource.error, incidentDetailResource.error].filter(Boolean)
-  const loading = !demoMode && [servicesResource, incidentsResource, recoveriesResource, analyticsResource, healthResource].some((resource) => resource.isLoading)
+  const apiErrors = [servicesResource.error, incidentsResource.error, recoveriesResource.error, analyticsResource.error, healthResource.error, incidentDetailResource.error, agentsResource.error].filter(Boolean)
+  const loading = !demoMode && [servicesResource, incidentsResource, recoveriesResource, analyticsResource, healthResource, agentsResource].some((resource) => resource.isLoading)
   const globalQuery = query.trim().toLowerCase()
   const filteredServices = useMemo(() => services.filter((service) => (environment === 'all' || service.environment === environment) && `${service.name} ${service.environment} ${service.status} ${service.id}`.toLowerCase().includes(globalQuery)), [services, environment, globalQuery])
   const filteredIncidents = useMemo(() => incidents.filter((incident) => `${incident.id} ${incident.title} ${incident.serviceName} ${incident.status} ${incident.severity}`.toLowerCase().includes(globalQuery)), [incidents, globalQuery])
   const filteredRecoveries = useMemo(() => recoveries.filter((item) => `${item.id} ${item.incidentId} ${item.serviceName} ${item.action} ${item.status}`.toLowerCase().includes(globalQuery)), [recoveries, globalQuery])
+  const filteredAgents = useMemo(() => agents.filter((agent) => (environment === 'all' || agent.environment === environment) && `${agent.name} ${agent.hostname} ${agent.status} ${agent.id}`.toLowerCase().includes(globalQuery)), [agents, environment, globalQuery])
   const incidentForDetail = incidents.find((item) => item.id === detailId) ?? incidentDetailResource.data
   const serviceForDetail = services.find((item) => item.id === detailId)
 
   const heading = (title: string, description: string, action?: React.ReactNode) => <div className="dashboard-heading"><div><h1>{title}</h1><p>{description}</p></div>{action && <div className="dashboard-toolbar">{action}</div>}</div>
   const notice = <div className={`notice-strip ${demoMode ? '' : 'live-notice'}`}><strong>{demoMode ? 'Read-only demonstration.' : 'Backend connection configured.'}</strong> {demoMode ? 'All displayed service names, incidents, metrics, and recovery outcomes are illustrative. No infrastructure is connected.' : 'Requests use the configured API. Values are shown only when returned by the backend.'}</div>
-  const refreshData = async () => { await Promise.all([servicesResource.mutate(), incidentsResource.mutate(), recoveriesResource.mutate(), analyticsResource.mutate(), healthResource.mutate()]) }
+  const refreshData = async () => { await Promise.all([servicesResource.mutate(), incidentsResource.mutate(), recoveriesResource.mutate(), analyticsResource.mutate(), healthResource.mutate(), agentsResource.mutate()]) }
 
   async function performApproval(id: string) {
     setBusyId(id)
@@ -215,6 +218,32 @@ export function DashboardView() {
     })
   }
 
+  async function performRevocation(id: string) {
+    setBusyId(id)
+    try {
+      await agentsApi.revoke(id)
+      await agentsResource.mutate()
+      setToast(`Agent ${id} has been revoked.`)
+    } catch (error) {
+      setDialog({ title: 'Agent revocation failed', description: error instanceof Error ? error.message : 'The backend rejected the revocation request.' })
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  function beginRevocation(id: string) {
+    if (demoMode) {
+      setDialog({ title: 'Demo actions are read-only', description: 'Agent revocation requires a live backend connection.' })
+      return
+    }
+    setDialog({
+      title: 'Revoke agent credentials?',
+      description: `This immediately revokes authentication keys for agent ${id}. The agent will no longer be able to execute recovery operations or report heartbeats.`,
+      confirmLabel: 'Revoke agent',
+      onConfirm: () => performRevocation(id),
+    })
+  }
+
   async function downloadReport(id: string, format: 'pdf' | 'json' = 'pdf') {
     if (demoMode) return
     setBusyId(`${id}-${format}`)
@@ -281,6 +310,10 @@ export function DashboardView() {
 
   if (page === 'reports') {
     return <>{commonNotices}<ReportsView incidents={filteredIncidents} demoMode={demoMode} onDownload={downloadReport} busyId={busyId} />{dialogLayer}{toastLayer}</>
+  }
+
+  if (page === 'agents') {
+    return <>{commonNotices}{heading('Infrastructure agents', 'Monitor distributed host agents, mTLS credentials, and execution capabilities.', <span className="demo-label">{filteredAgents.length} agents registered</span>)}<AgentsView agents={filteredAgents} demoMode={demoMode} onRevoke={beginRevocation} busyId={busyId} />{dialogLayer}{toastLayer}</>
   }
 
   if (page === 'settings') {

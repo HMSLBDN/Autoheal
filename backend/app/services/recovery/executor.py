@@ -22,6 +22,8 @@ from app.services.agent import (
     SimulatedAgentClient,
 )
 from app.services.events import event_broadcaster
+from app.services.recovery.orchestrator import RecoveryState, orchestrator
+from app.services.recovery.policy_engine import policy_engine
 from app.services.recovery.registry import is_action_allowed, get_action_definition
 from app.services.recovery.verifier import PostRecoveryVerifier
 
@@ -87,32 +89,27 @@ class RecoveryExecutor:
         if not service:
             raise ValueError(f"Service for recovery '{recovery_id}' was not found in database.")
 
-        # 4. Check Recovery Policy (cooldown, max retries)
-        if service:
-            pol_stmt = select(RecoveryPolicy).where(
-                RecoveryPolicy.service_id == service.id,
-                RecoveryPolicy.action == recovery.action,
-                RecoveryPolicy.is_active == True,
-            )
-            pol_res = await db.execute(pol_stmt)
-            policy = pol_res.scalar_one_or_none()
-            if policy:
-                # Check cooldown if previously executed
-                # (Can enforce cooldown logic if previous completed executions exist)
-                pass
-
-        # 5. Transition to 'running'
-        start_time = datetime.now(timezone.utc)
-        recovery.status = "running"
-        recovery.duration_seconds = 12
-
-        db.add(IncidentEvent(
+        # 4. Check Recovery Policy (cooldown, max retries, environment)
+        policy_eval = await policy_engine.evaluate_policy(
+            db=db,
+            organization_id=service.organization_id,
+            service_id=service.id,
+            action=recovery.action,
             incident_id=recovery.incident_id,
-            label="Recovery Executing",
-            detail=f"Executing action '{action_def.display_name if action_def else recovery.action}'.",
-            timestamp=start_time,
-            tone="neutral",
-        ))
+        )
+        if not policy_eval.allowed:
+            raise ValueError(f"Policy violation: {policy_eval.reason}")
+
+        # 5. Transition to 'executing' (canonical) / 'running' (frontend)
+        start_time = datetime.now(timezone.utc)
+        await orchestrator.transition(
+            db=db,
+            recovery=recovery,
+            target_state=RecoveryState.EXECUTING,
+            reason=f"Executing action '{action_def.display_name if action_def else recovery.action}'.",
+            organization_id=service.organization_id,
+        )
+        recovery.duration_seconds = 12
         await db.commit()
 
         # 6. Execute safe action via restricted infrastructure agent
@@ -146,7 +143,7 @@ class RecoveryExecutor:
             f"STDOUT:\n{agent_res.stdout_summary}\n"
         )
 
-        if recovery.result:
+        if "result" in recovery.__dict__ and recovery.result is not None:
             recovery.result.summary = exec_summary
             recovery.result.completed_at = now
             recovery.result.diagnostic_output = diag_output
@@ -174,13 +171,15 @@ class RecoveryExecutor:
         inc_res = await db.execute(inc_stmt)
         incident = inc_res.scalar_one()
 
-        await self.verifier.verify_recovery(
+        verified = await self.verifier.verify_recovery(
             db=db,
             recovery=recovery,
             incident=incident,
             service=service,
             simulated_healthy=simulated_outcome_healthy,
         )
+        recovery.status = "completed"
+        await db.commit()
 
         # Reload with eager-loaded result relationship
         final_stmt = (

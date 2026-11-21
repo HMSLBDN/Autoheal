@@ -1,4 +1,4 @@
-import type { AnalyticsSummary, Incident, RecoveryAction, Service } from '@/types'
+import type { AnalyticsSummary, Incident, InfrastructureAgent, RecoveryAction, Service } from '@/types'
 
 export const demoServices: Service[] = [
   { id: 'svc-api', name: 'checkout-api', environment: 'production', status: 'healthy', availability: 99.98, errorRate: 0.12, latencyMs: 142, lastChecked: '12 sec ago' },
@@ -51,3 +51,49 @@ export const demoAnalytics: AnalyticsSummary = {
     { date: 'Sun', incidents: 4, recoveries: 4, availability: 99.94 },
   ],
 }
+
+export const demoAgents: InfrastructureAgent[] = [
+  {
+    id: 'agent-prod-edge-01',
+    organizationId: 'org-demo-1',
+    name: 'prod-edge-cluster-01',
+    hostname: 'edge-node-01.internal.autoheal',
+    ipAddress: '10.240.0.12',
+    environment: 'production',
+    status: 'online',
+    version: '1.2.0',
+    capabilities: ['docker_restart', 'container_logs', 'health_check'],
+    publicKeyFingerprint: 'SHA256:d8a7c29e1f5b4a03c8e9f1a2b3c4d5e6',
+    lastHeartbeat: '14 sec ago',
+    createdAt: '2026-11-01T08:00:00Z',
+  },
+  {
+    id: 'agent-prod-k8s-01',
+    organizationId: 'org-demo-1',
+    name: 'prod-k8s-operator',
+    hostname: 'k8s-control-01.internal.autoheal',
+    ipAddress: '10.240.1.45',
+    environment: 'production',
+    status: 'online',
+    version: '1.2.0',
+    capabilities: ['k8s_rollout_restart', 'pod_status', 'workload_events', 'health_check'],
+    publicKeyFingerprint: 'SHA256:9f8e7d6c5b4a3a2b1c0d9e8f7a6b5c4d',
+    lastHeartbeat: '28 sec ago',
+    createdAt: '2026-11-05T12:00:00Z',
+  },
+  {
+    id: 'agent-staging-dock-01',
+    organizationId: 'org-demo-1',
+    name: 'staging-worker-host',
+    hostname: 'stg-worker-01.internal.autoheal',
+    ipAddress: '10.241.0.8',
+    environment: 'staging',
+    status: 'online',
+    version: '1.1.9',
+    capabilities: ['docker_restart', 'container_logs'],
+    publicKeyFingerprint: 'SHA256:1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d',
+    lastHeartbeat: '45 sec ago',
+    createdAt: '2026-11-10T09:30:00Z',
+  },
+]
+

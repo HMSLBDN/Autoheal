@@ -6,8 +6,8 @@ import Link from 'next/link'
 import useSWR from 'swr'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, CheckCircle2, CircleAlert, Clock3, Cpu, Download, Gauge, MemoryStick, Server, ShieldCheck } from 'lucide-react'
-import type { AnalyticsSummary, Incident, RecoveryAction, Service, ServiceMetrics } from '@/types'
-import { servicesApi, settingsApi } from '@/lib/api/resources'
+import type { AnalyticsSummary, Incident, InfrastructureAgent, RecoveryAction, RecoveryPolicy, Service, ServiceMetrics } from '@/types'
+import { agentsApi, policiesApi, servicesApi, settingsApi } from '@/lib/api/resources'
 import { demoServices } from '@/lib/demo/mock-data'
 import { isApiConfigured } from '@/lib/api/client'
 import { IncidentAreaChart, AvailabilityChart } from '@/components/dashboard/charts'
@@ -235,4 +235,126 @@ export function SettingsView({ demoMode, healthStatus }: { demoMode: boolean; he
     <section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Backend connection</h2><p className="panel-subtitle">Connection state is derived from the frontend API configuration.</p></div><span className={`status-chip ${demoMode ? 'pending' : healthStatus === 'healthy' || healthStatus === 'ok' ? 'completed' : 'degraded'}`}>{demoMode ? 'Not configured' : healthStatus ?? 'Checking health'}</span></div><div className="settings-connection"><span className="settings-connection-icon"><Server size={17} /></span><div><strong>{demoMode ? 'FastAPI endpoint not configured' : 'FastAPI endpoint configured'}</strong><p>{demoMode ? 'Set NEXT_PUBLIC_API_BASE_URL to connect the API. The demo provider remains read-only.' : healthStatus ? `Backend health response: ${healthStatus}. Authentication and CORS remain backend responsibilities.` : 'The backend health endpoint has not returned a status yet. Authentication and CORS remain backend responsibilities.'}</p></div></div></section>
     <div className="settings-grid">{items.map((item) => <section className="dash-card settings-card" key={item.title}><span className="settings-icon"><ShieldCheck size={14} /></span><div><h2>{item.title}</h2><p>{item.detail}</p><span className="settings-managed">{settingsData ? 'Connected' : 'Backend managed'}</span></div></section>)}</div>
   </>
+}
+
+export function AgentsView({
+  agents,
+  demoMode,
+  onRevoke,
+  onRefresh,
+  busyId,
+}: {
+  agents: InfrastructureAgent[]
+  demoMode: boolean
+  onRevoke?: (id: string) => void
+  onRefresh?: () => void
+  busyId?: string
+}) {
+  return (
+    <>
+      <div className="dashboard-heading">
+        <div>
+          <h1>Infrastructure Agents</h1>
+          <p>Inspect registered execution agents, connection heartbeats, and capabilities.</p>
+        </div>
+        <div className="dashboard-toolbar">
+          <span className={`demo-label ${demoMode ? '' : 'live'}`}>
+            {demoMode ? 'DEMO AGENTS' : `${agents.length} ACTIVE AGENTS`}
+          </span>
+          {onRefresh && (
+            <button className="dash-button" onClick={onRefresh}>
+              <Server size={12} />Refresh Status
+            </button>
+          )}
+        </div>
+      </div>
+      {demoMode && (
+        <div className="notice-strip">
+          Illustrative agent records shown. Connect an active infrastructure agent to view live heartbeats.
+        </div>
+      )}
+      <section className="dash-card panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Registered execution nodes</h2>
+            <p className="panel-subtitle">
+              Agents operate independently under cryptographic HMAC signing and strict action allowlists.
+            </p>
+          </div>
+        </div>
+        {agents.length ? (
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Agent ID & Hostname</th>
+                  <th>IP Address</th>
+                  <th>Environment</th>
+                  <th>Status</th>
+                  <th>Capabilities</th>
+                  <th>Last Heartbeat</th>
+                  <th>Controls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agents.map((agent) => (
+                  <tr key={agent.id}>
+                    <td>
+                      <span className="table-primary-link">{agent.name}</span>
+                      <small className="table-subtext">{agent.hostname} ({agent.id})</small>
+                    </td>
+                    <td><code>{agent.ipAddress}</code></td>
+                    <td><span className="table-badge">{agent.environment}</span></td>
+                    <td>
+                      <span
+                        className={`status-chip ${
+                          agent.status === 'online'
+                            ? 'completed'
+                            : agent.status === 'busy'
+                            ? 'running'
+                            : agent.status === 'degraded'
+                            ? 'warning'
+                            : 'failed'
+                        }`}
+                      >
+                        {agent.status}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                        {agent.capabilities.map((cap) => (
+                          <span key={cap} className="demo-label" style={{ fontSize: '10px' }}>
+                            {cap}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td>{agent.lastHeartbeat}</td>
+                    <td>
+                      {agent.status !== 'revoked' && onRevoke ? (
+                        <button
+                          className="dash-button"
+                          disabled={demoMode || busyId === agent.id}
+                          onClick={() => onRevoke(agent.id)}
+                        >
+                          {busyId === agent.id ? 'Revoking…' : 'Revoke'}
+                        </button>
+                      ) : (
+                        <span className="table-subtext">Revoked</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title="No infrastructure agents connected"
+            detail="Register a restricted agent on your compute node using POST /api/v1/agents/register to begin autonomous operations."
+          />
+        )}
+      </section>
+    </>
+  )
 }

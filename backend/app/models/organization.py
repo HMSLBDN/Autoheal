@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.service import Service
     from app.models.incident import Incident
     from app.models.audit import AuditLog
+    from app.models.agent import InfrastructureAgent
 
 
 class Organization(Base, TimestampMixin):
@@ -66,6 +67,11 @@ class Organization(Base, TimestampMixin):
     )
     audit_logs: Mapped[List["AuditLog"]] = relationship(
         "AuditLog",
+        back_populates="organization",
+        cascade="all, delete-orphan",
+    )
+    infrastructure_agents: Mapped[List["InfrastructureAgent"]] = relationship(
+        "InfrastructureAgent",
         back_populates="organization",
         cascade="all, delete-orphan",
     )

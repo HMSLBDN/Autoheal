@@ -29,6 +29,12 @@ class AIDiagnosisResult(BaseModel):
     risk_level: Literal["low", "medium", "high"] = Field("medium", description="Risk of performing the recommended recovery")
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Confidence factor between 0.0 and 1.0")
     expected_outcome: str = Field(..., description="Anticipated telemetry response post-recovery")
+    # Phase 7 Enhanced Structured Diagnosis Attributes
+    affected_service: Optional[str] = Field(None, description="Identified affected service name or resource identifier")
+    alternative_recovery_action: Optional[str] = Field(None, description="Secondary allowlisted recovery option if primary fails")
+    expected_impact: Optional[str] = Field(None, description="Detailed system impact assessment post-remediation")
+    verification_requirements: List[str] = Field(default_factory=list, description="Specific telemetry conditions required to confirm recovery")
+    provider_source: Literal["gemini", "heuristic_fallback"] = Field("heuristic_fallback", description="Engine that generated this diagnosis")
 
 
 class AIProvider(ABC):

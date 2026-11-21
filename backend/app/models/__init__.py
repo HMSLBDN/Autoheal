@@ -25,6 +25,7 @@ from app.models.recovery import (
 )
 from app.models.metric import ServiceMetric
 from app.models.audit import AuditLog
+from app.models.agent import InfrastructureAgent
 
 __all__ = [
     "Base",
@@ -46,4 +47,5 @@ __all__ = [
     "RecoveryResult",
     "ServiceMetric",
     "AuditLog",
+    "InfrastructureAgent",
 ]

@@ -1,4 +1,4 @@
-import type { AnalyticsSummary, Incident, IncidentEvent, IncidentEvidence, RecoveryAction, Service, ServiceMetrics } from '@/types'
+import type { AnalyticsSummary, Incident, IncidentEvent, IncidentEvidence, InfrastructureAgent, RecoveryAction, RecoveryPolicy, Service, ServiceMetrics } from '@/types'
 import { apiBlob, apiRequest, asArray, asObject, ApiError, AuthUser, setAccessToken, setStoredUser } from './client'
 
 function validateService(value: unknown): Service {
@@ -227,6 +227,71 @@ export const authApi = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, new_password: newPassword }),
+    })
+  },
+}
+
+function validateAgent(value: unknown): InfrastructureAgent {
+  const agent = asObject<InfrastructureAgent>(value, 'infrastructure agent', {
+    strings: ['id', 'organizationId', 'name', 'hostname', 'ipAddress', 'environment', 'status', 'version', 'publicKeyFingerprint', 'lastHeartbeat', 'createdAt'],
+  })
+  if (!['online', 'busy', 'degraded', 'offline', 'revoked'].includes(agent.status)) {
+    throw new ApiError('The agent response contains an unsupported status.', 502)
+  }
+  if (!Array.isArray(agent.capabilities)) {
+    agent.capabilities = ['restart_service', 'health_check']
+  }
+  return agent
+}
+
+function validatePolicy(value: unknown): RecoveryPolicy {
+  return asObject<RecoveryPolicy>(value, 'recovery policy', {
+    strings: ['id', 'serviceId', 'action'],
+    booleans: ['approvalRequired', 'isActive'],
+    numbers: ['cooldownSeconds', 'maxRetries'],
+  })
+}
+
+export const agentsApi = {
+  async list(signal?: AbortSignal): Promise<InfrastructureAgent[]> {
+    return asArray<InfrastructureAgent>(await apiRequest<unknown>('/api/v1/agents', { signal }), 'agents', validateAgent)
+  },
+  async get(id: string, signal?: AbortSignal): Promise<InfrastructureAgent> {
+    return validateAgent(await apiRequest<unknown>(`/api/v1/agents/${encodeURIComponent(id)}`, { signal }))
+  },
+  async register(payload: { name: string; hostname: string; ip_address: string; environment?: string; capabilities?: string[] }): Promise<{ agent: InfrastructureAgent; agent_secret: string }> {
+    return apiRequest<{ agent: InfrastructureAgent; agent_secret: string }>('/api/v1/agents/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async revoke(id: string): Promise<{ message: string; status: string }> {
+    return apiRequest<{ message: string; status: string }>(`/api/v1/agents/${encodeURIComponent(id)}/revoke`, {
+      method: 'POST',
+    })
+  },
+}
+
+export const policiesApi = {
+  async list(signal?: AbortSignal): Promise<RecoveryPolicy[]> {
+    return asArray<RecoveryPolicy>(await apiRequest<unknown>('/api/v1/policies', { signal }), 'policies', validatePolicy)
+  },
+  async forService(serviceId: string, signal?: AbortSignal): Promise<RecoveryPolicy[]> {
+    return asArray<RecoveryPolicy>(await apiRequest<unknown>(`/api/v1/policies/${encodeURIComponent(serviceId)}`, { signal }), 'service policies', validatePolicy)
+  },
+  async update(serviceId: string, payload: { approval_required?: boolean; cooldown_seconds?: number; max_retries?: number; is_active?: boolean }, action = 'restart_service'): Promise<RecoveryPolicy> {
+    return validatePolicy(await apiRequest<unknown>(`/api/v1/policies/${encodeURIComponent(serviceId)}?action=${encodeURIComponent(action)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }))
+  },
+  async evaluate(serviceId: string, action: string, agentId?: string): Promise<{ allowed: boolean; requiresApproval: boolean; reason: string; cooldownRemainingSeconds: number; retryCount: number; maxRetries: number }> {
+    return apiRequest<{ allowed: boolean; requiresApproval: boolean; reason: string; cooldownRemainingSeconds: number; retryCount: number; maxRetries: number }>('/api/v1/policies/evaluate/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ service_id: serviceId, action, agent_id: agentId }),
     })
   },
 }

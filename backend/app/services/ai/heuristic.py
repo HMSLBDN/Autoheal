@@ -54,6 +54,11 @@ class HeuristicDiagnosisProvider(AIProvider):
                 risk_level="medium",
                 confidence_score=0.92,
                 expected_outcome="Reverting to previous stable image will eliminate 5xx regressions and normalize latency.",
+                affected_service=service_name,
+                alternative_recovery_action="restart_service",
+                expected_impact="Restores previous container image and stable configuration.",
+                verification_requirements=["HTTP 200 on /health", "Error rate < 0.5% over 2 minutes"],
+                provider_source="heuristic_fallback",
             )
 
         # 2. Complete service outage / container crash
@@ -67,6 +72,11 @@ class HeuristicDiagnosisProvider(AIProvider):
                 risk_level="low",
                 confidence_score=0.95,
                 expected_outcome="Restarting the service pod will clear deadlocked processes and re-bind listeners.",
+                affected_service=service_name,
+                alternative_recovery_action="scale_service",
+                expected_impact="Cycles target process and clears stale socket listeners.",
+                verification_requirements=["TCP connect success", "Liveness probe 200 OK"],
+                provider_source="heuristic_fallback",
             )
 
         # 3. CPU / Request rate saturation
@@ -80,6 +90,11 @@ class HeuristicDiagnosisProvider(AIProvider):
                 risk_level="low",
                 confidence_score=0.88,
                 expected_outcome="Horizontal scale-up will distribute incoming request load and lower CPU per pod.",
+                affected_service=service_name,
+                alternative_recovery_action="restart_service",
+                expected_impact="Increases replica count to lower per-node CPU utilization.",
+                verification_requirements=["CPU utilization < 70%", "P95 latency < 300ms"],
+                provider_source="heuristic_fallback",
             )
 
         # 4. Latency / Cache / Connection pool saturation
@@ -93,6 +108,11 @@ class HeuristicDiagnosisProvider(AIProvider):
                 risk_level="low",
                 confidence_score=0.85,
                 expected_outcome="Evicting stale cache partitions and resetting connection pools will restore response times.",
+                affected_service=service_name,
+                alternative_recovery_action="restart_service",
+                expected_impact="Flushes corrupted cache keys and purges stale connection buffers.",
+                verification_requirements=["P95 latency < 200ms", "Zero connection timeouts"],
+                provider_source="heuristic_fallback",
             )
 
         # 5. Default safe remediation
@@ -105,4 +125,9 @@ class HeuristicDiagnosisProvider(AIProvider):
             risk_level="low",
             confidence_score=0.75,
             expected_outcome="Graceful restart will cycle runtime memory and recover SLA parameters.",
+            affected_service=service_name,
+            alternative_recovery_action=None,
+            expected_impact="Re-initializes runtime worker processes safely.",
+            verification_requirements=["Service availability > 99.9%", "Error rate < 1.0%"],
+            provider_source="heuristic_fallback",
         )

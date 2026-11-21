@@ -89,3 +89,30 @@ export interface AnalyticsSummary {
   incidentCount: number
   history: Array<{ date: string; incidents: number; recoveries: number; availability: number }>
 }
+
+export type AgentStatus = 'online' | 'busy' | 'degraded' | 'offline' | 'revoked'
+
+export interface InfrastructureAgent {
+  id: string
+  organizationId?: string
+  name: string
+  hostname: string
+  ipAddress: string
+  environment: string
+  status: AgentStatus
+  version: string
+  capabilities: string[]
+  publicKeyFingerprint: string
+  lastHeartbeat: string
+  createdAt: string
+}
+
+export interface RecoveryPolicy {
+  id: string
+  serviceId: string
+  action: string
+  approvalRequired: boolean
+  cooldownSeconds: number
+  maxRetries: number
+  isActive: boolean
+}

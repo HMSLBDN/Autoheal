@@ -129,6 +129,11 @@ class GeminiProvider(AIProvider):
                 # Validate using Pydantic
                 result = AIDiagnosisResult.model_validate(parsed_json)
 
+                # Assign provider source and affected service
+                result.provider_source = "gemini"
+                if not result.affected_service:
+                    result.affected_service = clean_context.get("service_name")
+
                 # Security check: verify recommended_action is in approved allowlist
                 if result.recommended_action not in APPROVED_RECOVERY_ACTIONS:
                     logger.warning(
