@@ -59,7 +59,13 @@ def api_client(db_session: AsyncSession) -> TestClient:
 # ==============================================================================
 def test_docker_development_port_security():
     """All development services must bind published ports explicitly to localhost (127.0.0.1)."""
-    compose_path = Path(__file__).resolve().parent.parent.parent / "docker-compose.dev.yml"
+    current = Path(__file__).resolve()
+    root = current.parent.parent.parent
+    for candidate in [current.parent.parent.parent, current.parent.parent, current.parent, Path("/")]:
+        if (candidate / "docker-compose.dev.yml").exists():
+            root = candidate
+            break
+    compose_path = root / "docker-compose.dev.yml"
     assert compose_path.exists(), "docker-compose.dev.yml must exist"
 
     with open(compose_path, "r", encoding="utf-8") as f:

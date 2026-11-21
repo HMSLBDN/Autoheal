@@ -178,12 +178,25 @@ The AutoHeal application (`backend/app/config.py`) automatically translates this
 - `?sslmode=require` $\to$ `?ssl=require`
 - `?sslmode=prefer` $\to$ `?ssl=prefer`
 - `?sslmode=disable` $\to$ `?ssl=disable`
+- `?sslmode=verify-ca` $\to$ `?ssl=verify-ca`
+- `?sslmode=verify-full` $\to$ `?ssl=verify-full`
 
-No manual URL rewriting is required; you can paste the standard provider connection string directly into `DATABASE_URL`.
+In production, disabling SSL (`disable`) is strictly rejected during settings validation. For enterprise environments with private Root CAs, supply the CA path via `DB_SSL_CA_CERT=/path/to/ca.pem` to enforce full certificate chain verification.
 
 ---
 
-## 4. Zero-Downtime Health Probes
+## 4. Redis TLS & Broker Security
+
+Managed cloud Redis instances (e.g. Render Redis, AWS ElastiCache, Upstash) provide TLS endpoints with `rediss://`.
+AutoHeal enforces strict TLS certificate verification on all `rediss://` connections:
+- **Default Verification**: Celery broker and results connections enforce `ssl_cert_reqs=ssl.CERT_REQUIRED` and hostname verification (`check_hostname=True`).
+- **Production Guardrail**: Attempting to set `REDIS_SSL_CERT_REQS=none` or disable hostname verification in production or staging triggers immediate startup failure.
+- **Custom CA Certificate**: Set `REDIS_SSL_CA_CERTS=/path/to/ca.pem` to provide a custom certificate authority.
+- **Local Development**: Standard `redis://` URLs bypass SSL configuration, allowing frictionless local Docker development.
+
+---
+
+## 5. Zero-Downtime Health Probes
 
 The FastAPI backend exposes three levels of health endpoints for orchestrator probes:
 
@@ -204,15 +217,29 @@ The FastAPI backend exposes three levels of health endpoints for orchestrator pr
 
 ---
 
-## 5. Reverse Proxy & Header Forwarding
+## 6. Configurable Reverse Proxy & Trusted Header Forwarding
 
-In production cloud environments, incoming TLS is terminated by a reverse proxy or load balancer (Cloudflare, AWS ALB, Render Edge Router).
+In production cloud environments, incoming TLS is terminated by an edge reverse proxy (Cloudflare, AWS ALB, Render Edge Router).
 
-The Uvicorn container command is configured with:
+The Uvicorn container command uses explicit trusted proxy allowlists:
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'
+uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips="${FORWARDED_ALLOW_IPS:-127.0.0.1,::1}"
 ```
 
-This guarantees:
-- `X-Forwarded-Proto` (`https`) is respected, allowing Secure cookies to be delivered correctly.
-- `X-Forwarded-For` captures actual client IP addresses for audit logging and rate limiting.
+### Security Policy:
+- **Default**: Restricted to localhost (`127.0.0.1,::1`).
+- **Production Setup**: Set `FORWARDED_ALLOW_IPS` to the explicit IP or CIDR blocks of your ingress proxy (e.g. `10.0.0.0/8,172.16.0.0/12` or Cloudflare proxy IP list).
+- **Wildcard Rejection**: Setting `FORWARDED_ALLOW_IPS=*` in production or staging is strictly rejected during application startup to prevent IP and protocol spoofing attacks.
+
+---
+
+## 7. Local Docker & Windows / WSL2 Compatibility
+
+### Node Exporter Root Filesystem Mounts
+- On Linux servers with systemd, Node Exporter mounts `/:/host:ro,rslave` to propagate mount tables.
+- On Windows Docker Desktop (WSL2), rootfs mount propagation is not supported and returns `path / is mounted on / but it is not a shared or slave mount`.
+- AutoHeal uses `/:/host:ro` (read-only without `rslave`), which runs seamlessly across Windows, macOS, and Linux without mount errors.
+
+### cAdvisor Containermetric Collection
+- On Windows Docker Desktop WSL2, Docker uses containerd for image storage, causing legacy overlayfs layerdb paths to be absent.
+- AutoHeal configures cAdvisor with `--docker_only=true --housekeeping_interval=15s --disable_metrics=disk,diskIO,hugetlb,referenced_memory,resctrl,perf_event`, ensuring zero log error spam while preserving 100% container CPU, memory, and runtime metrics.

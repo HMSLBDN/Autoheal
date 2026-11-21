@@ -86,8 +86,9 @@ This checklist defines mandatory security controls and verification procedures b
   - Backend Docker container creates and executes under unprivileged system user `autoheal:autoheal` (`UID 10001`).
 - [x] **Minimal Base Image**:
   - Utilizes `python:3.11-slim` with multi-stage build caching, omitting unnecessary system utilities, compilers, and shells.
-- [x] **Reverse Proxy Trust Configuration**:
-  - Uvicorn configured with `--proxy-headers --forwarded-allow-ips='*'` to correctly identify client IP addresses behind Cloudflare/Render edge proxies.
+- [x] **Configurable Reverse Proxy Trust**:
+  - Uvicorn configured with `--forwarded-allow-ips="${FORWARDED_ALLOW_IPS:-127.0.0.1,::1}"`.
+  - Wildcard proxy trust (`*`) is strictly rejected in production environments to prevent client IP and scheme spoofing.
 - [x] **Clean Process Termination**:
   - Asyncpg connection pool explicitly drained via `engine.dispose()` on FastAPI application shutdown.
 
@@ -100,6 +101,12 @@ This checklist defines mandatory security controls and verification procedures b
 - [x] **Cross-Origin Resource Sharing (CORS)**:
   - Backend strictly whitelists explicit frontend origins (no wildcard `*` with credentials).
   - Whitelist supports custom domains and Vercel preview environments.
-- [x] **PostgreSQL & Redis TLS**:
+- [x] **PostgreSQL TLS Verification**:
   - PostgreSQL connections enforce SSL (`sslmode=require` auto-translated to `ssl=require` for asyncpg).
-  - Redis connections support TLS via `rediss://` protocol with automated Celery SSL broker flags.
+  - Supports `verify-ca` and `verify-full` with custom CA certificate validation (`DB_SSL_CA_CERT`).
+  - Disabling SSL (`disable`) in production or staging is strictly rejected by configuration validation.
+- [x] **Redis TLS Certificate Verification**:
+  - Redis connections support TLS via `rediss://` protocol.
+  - Enforces `ssl.CERT_REQUIRED` and hostname verification (`ssl_check_hostname=True`).
+  - Supports custom CA certificates (`REDIS_SSL_CA_CERTS`) and client mTLS certificates.
+  - Disabling certificate verification (`none`) in production or staging is strictly rejected.

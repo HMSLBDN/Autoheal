@@ -7,8 +7,16 @@ import pytest
 import yaml
 
 
+def _find_repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for candidate in [current.parent.parent.parent, current.parent.parent, current.parent, Path("/")]:
+        if (candidate / "docker-compose.yml").exists() and (candidate / "docker-compose.dev.yml").exists():
+            return candidate
+    return current.parent.parent.parent
+
+
 def test_docker_compose_production_structure():
-    compose_path = Path(__file__).resolve().parent.parent.parent / "docker-compose.yml"
+    compose_path = _find_repo_root() / "docker-compose.yml"
     assert compose_path.exists(), "docker-compose.yml must exist"
 
     with open(compose_path, "r", encoding="utf-8") as f:
@@ -45,7 +53,7 @@ def test_docker_compose_production_structure():
 
 
 def test_docker_compose_development_structure():
-    compose_dev_path = Path(__file__).resolve().parent.parent.parent / "docker-compose.dev.yml"
+    compose_dev_path = _find_repo_root() / "docker-compose.dev.yml"
     assert compose_dev_path.exists(), "docker-compose.dev.yml must exist"
 
     with open(compose_dev_path, "r", encoding="utf-8") as f:
@@ -71,12 +79,19 @@ def test_docker_compose_development_structure():
 
 
 def test_dockerfiles_exist_and_non_root():
-    root = Path(__file__).resolve().parent.parent.parent
+    root = _find_repo_root()
+    if (root / "backend").exists():
+        backend_dir = root / "backend"
+    elif Path("/app/Dockerfile.celery_worker").exists():
+        backend_dir = Path("/app")
+    else:
+        backend_dir = root
+
     dockerfiles = [
-        root / "Dockerfile",
-        root / "backend" / "Dockerfile",
-        root / "backend" / "Dockerfile.celery_worker",
-        root / "backend" / "Dockerfile.celery_beat",
+        root / "Dockerfile" if (root / "Dockerfile").exists() else backend_dir / "Dockerfile",
+        backend_dir / "Dockerfile",
+        backend_dir / "Dockerfile.celery_worker",
+        backend_dir / "Dockerfile.celery_beat",
     ]
 
     for df in dockerfiles:

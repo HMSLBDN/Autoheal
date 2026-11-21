@@ -3,8 +3,10 @@ AutoHeal DevOps — Database Connection & Async Session Engine
 """
 
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 import logging
+import os
+import ssl
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -17,6 +19,49 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+
+def create_database_ssl_context(settings_obj=None) -> Optional[ssl.SSLContext]:
+    """
+    Constructs an explicit SSLContext for asyncpg when custom CA certificates,
+    client certificates, or explicit verify modes are configured.
+    """
+    cfg = settings_obj or settings
+    if not cfg.DB_SSL_CA_CERT and not cfg.DB_SSL_CLIENT_CERT and not cfg.DB_SSL_MODE:
+        return None
+
+    mode = cfg.DB_SSL_MODE or "require"
+    if mode == "disable":
+        return None
+
+    if mode in ("verify-full", "verify-ca"):
+        context = ssl.create_default_context(
+            purpose=ssl.Purpose.SERVER_AUTH,
+            cafile=cfg.DB_SSL_CA_CERT,
+        )
+        if mode == "verify-ca":
+            context.check_hostname = False
+        else:
+            context.check_hostname = True
+        context.verify_mode = ssl.CERT_REQUIRED
+    else:  # require or prefer
+        if cfg.DB_SSL_CA_CERT:
+            context = ssl.create_default_context(cafile=cfg.DB_SSL_CA_CERT)
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_REQUIRED
+        else:
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+
+    if cfg.DB_SSL_CLIENT_CERT:
+        if not os.path.isfile(cfg.DB_SSL_CLIENT_CERT):
+            raise FileNotFoundError(f"Configured DB_SSL_CLIENT_CERT not found: {cfg.DB_SSL_CLIENT_CERT}")
+        if not cfg.DB_SSL_CLIENT_KEY or not os.path.isfile(cfg.DB_SSL_CLIENT_KEY):
+            raise FileNotFoundError(f"Configured DB_SSL_CLIENT_KEY not found or missing: {cfg.DB_SSL_CLIENT_KEY}")
+        context.load_cert_chain(cfg.DB_SSL_CLIENT_CERT, cfg.DB_SSL_CLIENT_KEY)
+
+    return context
 
 
 def get_engine_args(database_url: str) -> dict:
@@ -44,6 +89,9 @@ def get_engine_args(database_url: str) -> dict:
             "pool_recycle": settings.DB_POOL_RECYCLE,
             "pool_timeout": settings.DB_POOL_TIMEOUT,
         })
+        ssl_ctx = create_database_ssl_context(settings)
+        if ssl_ctx:
+            engine_kwargs.setdefault("connect_args", {})["ssl"] = ssl_ctx
 
     return engine_kwargs
 
@@ -87,10 +135,17 @@ async def get_isolated_task_session() -> AsyncGenerator[AsyncSession, None]:
     Creates an isolated AsyncSession with NullPool and explicitly disposes the engine on exit.
     Specifically designed for background Celery tasks running in ephemeral event loops.
     """
+    engine_kwargs: dict = {
+        "poolclass": NullPool,
+        "echo": False,
+    }
+    ssl_ctx = create_database_ssl_context(settings)
+    if ssl_ctx:
+        engine_kwargs.setdefault("connect_args", {})["ssl"] = ssl_ctx
+
     task_engine = create_async_engine(
         settings.DATABASE_URL,
-        poolclass=NullPool,
-        echo=False,
+        **engine_kwargs,
     )
     task_session_factory = async_sessionmaker(
         bind=task_engine,

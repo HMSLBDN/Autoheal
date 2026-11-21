@@ -2,10 +2,11 @@
 AutoHeal DevOps — Configuration & Environment Management
 """
 
+import json
+import urllib.parse
 from functools import lru_cache
 from typing import List, Literal, Optional, Union
-import json
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -96,25 +97,35 @@ class Settings(BaseSettings):
     def assemble_database_url(cls, value: str) -> str:
         if not value:
             return value
-        if value.startswith("postgres://"):
-            value = value.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif value.startswith("postgresql://") and not value.startswith("postgresql+"):
-            value = value.replace("postgresql://", "postgresql+asyncpg://", 1)
-        # Normalize cloud PostgreSQL SSL query parameter for asyncpg dialect
-        if "sslmode=" in value:
-            value = (
-                value.replace("sslmode=require", "ssl=require")
-                .replace("sslmode=prefer", "ssl=prefer")
-                .replace("sslmode=disable", "ssl=disable")
-                .replace("sslmode=verify-full", "ssl=verify-full")
-                .replace("sslmode=verify-ca", "ssl=verify-ca")
-            )
-        return value
+        parsed = urllib.parse.urlsplit(value)
+        query_params = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+
+        if "sslmode" in query_params:
+            sslmode_val = query_params.pop("sslmode")[0]
+            valid_modes = {"disable", "prefer", "require", "verify-ca", "verify-full"}
+            if sslmode_val not in valid_modes:
+                raise ValueError(
+                    f"Invalid PostgreSQL sslmode: '{sslmode_val}'. Supported modes are: {sorted(valid_modes)}"
+                )
+            query_params["ssl"] = [sslmode_val]
+
+        new_query = urllib.parse.urlencode([(k, v) for k, vs in query_params.items() for v in vs])
+        scheme = parsed.scheme
+        if scheme in ("postgres", "postgresql"):
+            scheme = "postgresql+asyncpg"
+
+        return urllib.parse.urlunsplit((scheme, parsed.netloc, parsed.path, new_query, parsed.fragment))
 
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 1800
+
+    # Database SSL / TLS Settings
+    DB_SSL_MODE: Optional[Literal["disable", "prefer", "require", "verify-ca", "verify-full"]] = None
+    DB_SSL_CA_CERT: Optional[str] = None
+    DB_SSL_CLIENT_CERT: Optional[str] = None
+    DB_SSL_CLIENT_KEY: Optional[str] = None
 
     # Redis Broker & Cache
     REDIS_URL: str = Field(
@@ -124,6 +135,34 @@ class Settings(BaseSettings):
     )
     CELERY_BROKER_URL: Optional[str] = None
     CELERY_RESULT_BACKEND: Optional[str] = None
+
+    # Redis TLS & Security
+    REDIS_SSL_CERT_REQS: Literal["required", "optional", "none"] = Field(
+        default="required",
+        description="Verification mode for Redis TLS: required, optional, or none"
+    )
+    REDIS_SSL_CA_CERTS: Optional[str] = Field(
+        default=None,
+        description="Path to CA certificate bundle file for verifying Redis server certificate"
+    )
+    REDIS_SSL_CERTFILE: Optional[str] = Field(
+        default=None,
+        description="Path to client certificate file for Redis mTLS authentication"
+    )
+    REDIS_SSL_KEYFILE: Optional[str] = Field(
+        default=None,
+        description="Path to client private key file for Redis mTLS authentication"
+    )
+    REDIS_SSL_CHECK_HOSTNAME: bool = Field(
+        default=True,
+        description="Whether to verify Redis server hostname against certificate SAN/CN"
+    )
+
+    # Reverse Proxy & Trusted IPs
+    FORWARDED_ALLOW_IPS: str = Field(
+        default="127.0.0.1,::1",
+        description="Comma-separated trusted proxy IP addresses or CIDR ranges for X-Forwarded-* headers"
+    )
 
     # Cookie & Authentication Settings
     COOKIE_SECURE: Optional[bool] = None
@@ -155,6 +194,28 @@ class Settings(BaseSettings):
     # Recovery Automation Engine
     MAX_RECOVERY_RETRIES: int = 3
     RECOVERY_COOLDOWN_SECONDS: int = 300
+
+    @model_validator(mode="after")
+    def validate_security_settings(self) -> "Settings":
+        if self.APP_ENV in ("production", "staging"):
+            if self.FORWARDED_ALLOW_IPS.strip() in ("*", "'*'", '"*"'):
+                raise ValueError(
+                    "Wildcard FORWARDED_ALLOW_IPS ('*') is strictly prohibited in production. "
+                    "Configure explicit trusted reverse proxy IP addresses or CIDR blocks."
+                )
+            if self.REDIS_SSL_CERT_REQS == "none":
+                raise ValueError(
+                    "Disabling Redis TLS certificate verification ('none') is strictly prohibited in production or staging."
+                )
+            if not self.REDIS_SSL_CHECK_HOSTNAME:
+                raise ValueError(
+                    "Disabling Redis TLS hostname verification is strictly prohibited in production or staging."
+                )
+            if self.DB_SSL_MODE == "disable":
+                raise ValueError(
+                    "Disabling database SSL ('disable') is strictly prohibited in production or staging."
+                )
+        return self
 
 
 @lru_cache()

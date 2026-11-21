@@ -35,6 +35,12 @@ Configure these variables in your container hosting platform (Render, Railway, A
 | `COOKIE_SECURE` | No | None | Auto (`True` in prod) | Forces HTTPS transmission on refresh token cookies. |
 | `COOKIE_SAMESITE` | No | None | Auto (`none` in prod) | Allows cross-origin cookie transmission between Vercel and backend domains. |
 | `COOKIE_DOMAIN` | No | None | `None` (Host-only) | When unset, cookie is strictly bound to backend domain, preventing cross-subdomain leakage. |
+| `FORWARDED_ALLOW_IPS` | No | None | `127.0.0.1,::1` | Comma-separated trusted reverse proxy IPs or CIDR blocks for `X-Forwarded-*` headers. Wildcard `*` is strictly rejected in production. |
+| `REDIS_SSL_CERT_REQS` | No | None | `required` | Redis TLS certificate verification mode: `required`, `optional`, or `none`. Disabling (`none`) is strictly prohibited in production. |
+| `REDIS_SSL_CA_CERTS` | No | None | `None` | Path to custom CA certificate bundle for verifying Redis server certificates. |
+| `REDIS_SSL_CHECK_HOSTNAME` | No | None | `True` | Whether to verify the Redis server hostname against certificate SAN/CN. Disabling is prohibited in production. |
+| `DB_SSL_MODE` | No | None | `None` (from URL) | Explicit database SSL mode: `require`, `verify-ca`, `verify-full`, `prefer`, or `disable`. `disable` is prohibited in production. |
+| `DB_SSL_CA_CERT` | No | None | `None` | Path to custom CA bundle for verifying PostgreSQL server certificates (e.g. AWS RDS or Neon bundle). |
 
 ---
 

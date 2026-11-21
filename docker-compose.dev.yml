@@ -15,6 +15,9 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./backend:/app
+      - ./docker-compose.yml:/docker-compose.yml:ro
+      - ./docker-compose.dev.yml:/docker-compose.dev.yml:ro
+      - ./Dockerfile:/Dockerfile:ro
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     environment:
       - ENVIRONMENT=development
@@ -48,6 +51,9 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend:/app
+      - ./docker-compose.yml:/docker-compose.yml:ro
+      - ./docker-compose.dev.yml:/docker-compose.dev.yml:ro
+      - ./Dockerfile:/Dockerfile:ro
     environment:
       - ENVIRONMENT=development
       - DATABASE_URL=postgresql+asyncpg://autoheal_user:autoheal_dev_pass@db:5432/autoheal_db
@@ -75,6 +81,9 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend:/app
+      - ./docker-compose.yml:/docker-compose.yml:ro
+      - ./docker-compose.dev.yml:/docker-compose.dev.yml:ro
+      - ./Dockerfile:/Dockerfile:ro
     environment:
       - ENVIRONMENT=development
       - DATABASE_URL=postgresql+asyncpg://autoheal_user:autoheal_dev_pass@db:5432/autoheal_db
@@ -205,12 +214,15 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     container_name: autoheal_cadvisor_dev
     restart: unless-stopped
+    command:
+      - --docker_only=true
+      - --housekeeping_interval=15s
+      - --disable_metrics=disk,diskIO,hugetlb,referenced_memory,resctrl,perf_event
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
     ports:
       - "127.0.0.1:8085:8080"
     networks:
