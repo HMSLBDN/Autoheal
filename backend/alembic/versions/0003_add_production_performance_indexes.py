@@ -18,6 +18,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # 0. Expand alembic_version.version_num to VARCHAR(128) to allow descriptive revision identifiers
+    conn = op.get_bind()
+    if conn.dialect.name == "postgresql":
+        op.execute("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128);")
+
     # 1. Incidents composite indexes: (organization_id, detected_at) and (organization_id, status)
     op.create_index(
         "ix_incidents_org_detected_at",

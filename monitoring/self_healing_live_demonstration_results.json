@@ -1,0 +1,41 @@
+{
+  "demonstration_id": "demo-live-876b469d",
+  "timestamp_start": "2026-11-21T14:05:37.896006+00:00",
+  "safety_guardrails": {
+    "RECOVERY_SIMULATION_MODE": true,
+    "EXTERNAL_DEPLOYMENT_PERMITTED": false,
+    "REAL_PRODUCTION_DESTRUCTION_PERMITTED": false
+  },
+  "scenarios": {
+    "scenario_a_success": {
+      "incident_id": "INC-FAIL-ea38c3",
+      "service": "checkout-api",
+      "chaos_status_code": 503,
+      "ai_confidence": 0.94,
+      "remediation_action": "restart_service",
+      "approver": "devops_admin@autoheal.io",
+      "post_recovery_status_code": 200,
+      "incident_final_status": "resolved",
+      "audit_hash": "3d2c56eea04bf38f42631e2c9ff969bef8632659646f26fdaa274728954870af",
+      "status": "VERIFIED_SUCCESSFUL_HEALING"
+    },
+    "scenario_b_escalation": {
+      "incident_id": "INC-FAIL-d2861d",
+      "service": "checkout-api",
+      "post_remediation_status_code": 503,
+      "incident_final_status": "investigating",
+      "escalation_note": "Automated remediation failed verification. Incident escalated to Tier-3 SRE On-Call.",
+      "audit_hash": "c54489a9a51a1aafbd60754ffd140b1ab7261f5b63e68b34075725282cdc1931",
+      "status": "VERIFIED_SAFE_ESCALATION"
+    },
+    "scenario_c_security": {
+      "viewer_role_rejected": true,
+      "unapproved_action_rejected": true,
+      "unallowlisted_action_rejected": true,
+      "cross_tenant_access_rejected": true,
+      "status": "VERIFIED_ALL_SECURITY_CONTROLS_ENFORCED"
+    }
+  },
+  "duration_seconds": 7.4148,
+  "status": "ALL_SCENARIOS_VERIFIED_SUCCESS"
+}

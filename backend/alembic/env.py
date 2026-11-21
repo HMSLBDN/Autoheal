@@ -4,9 +4,24 @@ import os
 import sys
 
 from alembic import context
-from sqlalchemy import pool
+from alembic.ddl.postgresql import PostgresqlImpl
+from sqlalchemy import pool, Table, MetaData, Column, String, PrimaryKeyConstraint
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+# Support migration revision identifiers longer than default 32 characters
+def _custom_version_table_impl(self, *, version_table: str, version_table_schema=None, version_table_pk=True, **kw):
+    vt = Table(
+        version_table,
+        MetaData(),
+        Column("version_num", String(128), nullable=False),
+        schema=version_table_schema,
+    )
+    if version_table_pk:
+        vt.append_constraint(PrimaryKeyConstraint("version_num", name=f"{version_table}_pkc"))
+    return vt
+
+PostgresqlImpl.version_table_impl = _custom_version_table_impl
 
 # Ensure backend directory is in sys.path
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -30,8 +45,8 @@ if config.config_file_name is not None:
 # Set target metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url with application settings
-db_url = settings.DATABASE_URL
+# Override sqlalchemy.url with environment or application settings
+db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
 config.set_main_option("sqlalchemy.url", db_url)
 
 

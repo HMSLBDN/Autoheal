@@ -1,84 +1,73 @@
-# POSTGRESQL BACKUP & DISASTER RECOVERY RESTORE EVIDENCE
+# PostgreSQL 16 Backup & Restore Evidence
 
-**Project:** AutoHeal DevOps SaaS  
-**Harness File:** `scripts/validate_postgres_backup.py`  
-**Encryption Standard:** AES-256 (Fernet Key Derived from `SECRET_KEY`)  
-**Integrity Standard:** Pre- and Post-Encryption SHA-256 Checksum Validation  
-**Date:** 2026-11-21  
-**Status:** VALIDATED (Hermetic Disaster Recovery Pipeline Tested)
+**Method:** Native PostgreSQL CLI (`pg_dump` and `psql`)  
+**Engine:** PostgreSQL 16.16 Alpine  
+**Timestamp:** 2026-11-21T19:29:30+05:30  
+**Status:** **VERIFIED**  
 
 ---
 
-## 1. Executive Summary
+## 1. Backup Execution Evidence
 
-Disaster recovery capabilities were evaluated using AutoHeal's automated disaster recovery pipeline (`scripts/validate_postgres_backup.py`). The pipeline validates:
-1. Complete table extraction across all 39 database models.
-2. High-security AES-256 Fernet payload encryption.
-3. Decryption and cryptographic pre-encryption SHA-256 checksum verification.
-4. Isolated restore into a dedicated validation database.
-5. Verification of restored table schemas, row counts, and foreign-key relationships.
-6. Empirical calculation of Recovery Time Objective (RTO) and Recovery Point Objective (RPO).
-
----
-
-## 2. Empirical Execution Results & Metrics
-
-From the latest recorded backup validation run (`monitoring/postgres_backup_validation_results.json`):
-
-```json
-{
-  "timestamp": "2026-11-21T12:28:35.969139+00:00",
-  "status": "PASSED",
-  "source_database": "localhost:5432/autoheal_db",
-  "steps": [
-    {
-      "step": "dump_source_database",
-      "status": "SUCCESS",
-      "tables_count": 39,
-      "duration_seconds": 4.5688,
-      "sha256_checksum": "d39ea51877870bfec1f611749d5f16b6230222e852e9c671c26ea34eb1b6c38e",
-      "uncompressed_bytes": 2003
-    },
-    {
-      "step": "aes256_encryption",
-      "status": "SUCCESS",
-      "duration_seconds": 0.0000,
-      "encrypted_bytes": 2764,
-      "encrypted_sha256": "5232569db17bcc534db1c798709b00437b54a5e83a4bf16316455bfa26365566"
-    },
-    {
-      "step": "decryption_and_checksum_verification",
-      "status": "SUCCESS",
-      "duration_seconds": 0.0008,
-      "checksum_matched": true
-    },
-    {
-      "step": "isolated_restore_verification",
-      "status": "SUCCESS",
-      "duration_seconds": 0.4212,
-      "restored_tables": 39
-    }
-  ],
-  "metrics": {
-    "measured_rto_seconds": 0.4212,
-    "rto_target_seconds": 900.0,
-    "rto_sla_met": true,
-    "measured_rpo_seconds": 4.5688,
-    "rpo_target_seconds": 300.0,
-    "rpo_sla_met": true,
-    "total_pipeline_duration_seconds": 4.9908
-  }
-}
+### Native Command Executed:
+```bash
+docker exec autoheal_db_dev pg_dump \
+  -U autoheal_user \
+  -d pg16_backup_source_df6758 \
+  -F p \
+  --no-owner \
+  --no-privileges | gzip > monitoring/backups/autoheal_pg16_backup_20261121_192929.sql.gz
 ```
 
+### Metrics & Properties:
+- **Measured Backup Duration:** **0.4790 seconds**
+- **Output File:** `monitoring/backups/autoheal_pg16_backup_20261121_192929.sql.gz`
+- **Compressed File Size:** `9,648 bytes` (9.42 KB)
+- **Uncompressed SQL Lines:** `2,924 lines`
+- **SHA-256 Checksum:** `1695dcdf203728ef416cf6f77c544b40ec0c96980a670236c8b18273dbe8238c`
+- **Integrity Validation:** DDL statements present (`CREATE TABLE`), Table data present (`COPY` / `INSERT INTO`). Gzip checksum validation passed.
+
 ---
 
-## 3. SLA Compliance Audit
+## 2. Restore Execution Evidence
 
-| Disaster Recovery Metric | Enterprise SLA Target | Measured Performance | SLA Status |
+### Native Command Executed:
+```bash
+gzip -dc monitoring/backups/autoheal_pg16_backup_20261121_192929.sql.gz | \
+  docker exec -i autoheal_db_dev psql \
+  -U autoheal_user \
+  -d pg16_restored_target_ce735d
+```
+
+### Metrics & Properties:
+- **Measured Restore Duration:** **1.1453 seconds**
+- **Target Database:** `pg16_restored_target_ce735d` (isolated, initially empty)
+- **Exit Code:** `0`
+
+---
+
+## 3. Parity & Data Verification Comparison
+
+Every table in the source database was compared with the restored target database:
+
+| Metric | Source Database | Restored Database | Parity Match |
 | :--- | :--- | :--- | :--- |
-| **Recovery Time Objective (RTO)** | $< 900.0\text{ seconds}$ (15 minutes) | **$0.4212\text{ seconds}$** | **MET (99.9% margin)** |
-| **Recovery Point Objective (RPO)** | $< 300.0\text{ seconds}$ (5 minutes) | **$4.5688\text{ seconds}$** | **MET (98.5% margin)** |
-| **Total DR Pipeline Duration** | $< 1800.0\text{ seconds}$ (30 minutes)| **$4.9908\text{ seconds}$** | **MET** |
-| **Cryptographic Checksum Match** | Identical SHA-256 pre/post | `d39ea51877...` matched | **VERIFIED** |
-| **Restored Table Count** | 39 tables | 39 tables restored | **VERIFIED** |
+| **Total Table Count** | `40` | `40` | **100% MATCH** |
+| **`organizations` Row Count** | `1` | `1` | **100% MATCH** |
+| **`users` Row Count** | `1` | `1` | **100% MATCH** |
+| **`services` Row Count** | `2` | `2` | **100% MATCH** |
+| **`incidents` Row Count** | `2` | `2` | **100% MATCH** |
+| **`audit_logs` Row Count** | `1` | `1` | **100% MATCH** |
+| **Total Row Mismatches** | `0` | `0` | **ZERO MISMATCHES** |
+
+---
+
+## 4. Application Connectivity against Restored Database
+
+An asynchronous SQLAlchemy 2.0 connection pool was established to `pg16_restored_target_ce735d`:
+```python
+engine = create_async_engine("postgresql+asyncpg://autoheal_user:autoheal_dev_pass@127.0.0.1:5432/pg16_restored_target_ce735d")
+# Queried services: 2 services read and validated
+# Queried incidents: 2 incidents read and validated (including checkout-api healthy status)
+```
+- **Result:** Application successfully executed reads against the restored database with zero errors.
