@@ -245,6 +245,17 @@ class Settings(BaseSettings):
                     "In production and staging environments, a dedicated secret must be provided via the "
                     "ALERTMANAGER_HMAC_SECRET environment variable."
                 )
+            insecure_secret_defaults = {
+                "autoheal_insecure_dev_secret_change_in_production_1234567890",
+                "change_me",
+                "secret",
+                "",
+            }
+            if not self.SECRET_KEY or self.SECRET_KEY in insecure_secret_defaults or len(self.SECRET_KEY) < 32:
+                raise ValueError(
+                    "SECRET_KEY is missing, too short (must be >= 32 characters), or using an insecure default value. "
+                    "In production and staging environments, a dedicated secret must be provided via the SECRET_KEY environment variable."
+                )
             if self.APP_ENV == "production" and "DEMO_MODE_ENABLED" not in self.model_fields_set:
                 self.DEMO_MODE_ENABLED = False
         return self

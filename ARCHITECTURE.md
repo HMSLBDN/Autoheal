@@ -82,7 +82,7 @@ AutoHeal DevOps is an autonomous, policy-governed site reliability engineering (
    * `HighLatency`: Fired when P95 response time exceeds $500\text{ms}$ for $\ge 1\text{m}$.
    * `CPUSaturation`: Fired when process CPU exceeds $85\%$ for $\ge 2\text{m}$.
    * `MemoryLeakSuspected`: Fired when memory consumption exceeds $1.8\text{ GB}$ for $\ge 3\text{m}$.
-3. **Alertmanager Webhook**: Active alerts are grouped and dispatched via HTTP POST to FastAPI `/api/v1/alerts/webhook` with HMAC SHA-256 or Bearer authentication.
+3. **Alertmanager Webhook**: Active alerts are grouped and dispatched via HTTP POST to FastAPI `/api/v1/alerts/webhook` with HMAC SHA-256 or Bearer authentication. This endpoint is strictly a server-to-server interface; the Next.js frontend never invokes or handles webhook secrets, which remain exclusively server-side.
 
 ### 2.2 Incident Management & Deduplication
 * **Deterministic Incident ID Generation**: Incidents receive monotonic identifiers (e.g., `INC-1070`).

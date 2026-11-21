@@ -275,7 +275,7 @@ alembic -c backend/alembic.ini upgrade head
 
 ### 10.4 Running Tests
 ```powershell
-# Run full backend pytest suite (136 tests)
+# Run full backend pytest suite (143 tests)
 .\.venv\Scripts\python -m pytest backend/tests -v
 
 # Run frontend TypeScript typecheck
@@ -289,7 +289,7 @@ pnpm run build
 
 ## 11. Test Coverage & Verification Summary
 
-All 136 backend tests pass with zero failures:
+All 143 backend tests pass with zero failures:
 - `test_agent_architecture.py`: Envelope signing, nonce replay rejection, timestamp drift, allowlist enforcement, simulated execution.
 - `test_ai_diagnosis.py`: AI root cause analysis, prompt injection defense, heuristic fallback, allowlist enforcement.
 - `test_alerts.py`: Webhook HMAC-SHA256 signature verification, incident deduplication, duplicate resolved alert protection.
@@ -300,6 +300,7 @@ All 136 backend tests pass with zero failures:
 - `test_docker_compose.py`: Compose service topology, security checks (no public db/redis ports in prod, zero Docker socket mounts, non-root users).
 - `test_e2e_demo_lifecycle.py` & `test_e2e_workflow.py`: Complete 14-stage and 17-step end-to-end integration workflows.
 - `test_events.py`: Incident events audit log, state transitions, tenant filtering.
+- `test_frontend_secret_security.py`: Server-side-only webhook secret boundary, NEXT_PUBLIC_* variable allowlist enforcement, compiled bundle scan.
 - `test_incidents.py`: Incident creation, status transitions, resolution verification.
 - `test_readiness.py`: Public health, liveness, and deep database/redis readiness probes.
 - `test_recoveries.py` & `test_recovery_engine.py`: Policy cooldown, RBAC approval gating, simulated recovery execution, post-recovery health verification.
@@ -307,7 +308,7 @@ All 136 backend tests pass with zero failures:
 - `test_reports.py`: PDF post-mortem generation and JSON export with organization scoping.
 - `test_reverse_proxy_security.py`: Trusted proxy CIDRs and wildcard proxy rejection in production.
 - `test_services.py`: Service registration, health state tracking, and metrics association.
-- `test_settings.py`: Startup security fail-safes (HMAC secret enforcement, wildcard proxy prevention).
+- `test_settings.py`: Startup security fail-safes (HMAC secret enforcement, SECRET_KEY entropy & default check, wildcard proxy prevention).
 - `test_sse.py` & `test_sse_ticket_security.py`: Server-Sent Events broadcasting, single-use ticket issuance, atomic burn on handshake.
 
 ---

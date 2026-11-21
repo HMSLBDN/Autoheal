@@ -12,12 +12,14 @@
 AutoHeal DevOps Phase 5 finalization, security audit, and production readiness assessment have been successfully executed and validated.
 
 All seventeen functional, architectural, and security domains outlined in the Phase 5 specification have passed verification:
-- 136 backend unit, integration, and security tests pass with 0 failures (100% pass rate).
+- 143 backend unit, integration, and security tests pass with 0 failures (100% pass rate).
 - TypeScript compiles cleanly with zero type errors (`npx tsc --noEmit`).
 - Production Next.js build completes successfully without errors.
+- Compiled frontend bundles scanned and verified clean of any leaked webhook secrets or keys.
 - Both Docker Compose topologies (`docker-compose.yml` and `docker-compose.dev.yml`) pass strict syntax and validation checks.
 - Zero committed secrets or credentials verified.
-- The legacy alert webhook secret was audited, eliminated, and hardened with a production fail-safe validator and documented rotation policy.
+- The legacy alert webhook secret was audited, eliminated, and hardened with production fail-safe validators for both `ALERTMANAGER_HMAC_SECRET` and `SECRET_KEY`.
+- All frontend webhook secret exposure (`NEXT_PUBLIC_ALERTMANAGER_SECRET` and `alertsApi`) has been completely removed.
 - All 12 comprehensive operational and architectural documentation artifacts are authored and linked.
 
 ---
@@ -27,7 +29,7 @@ All seventeen functional, architectural, and security domains outlined in the Ph
 | Domain # | Requirement Description | Verification Method | Status | Empirical Proof / Evidence |
 | :--- | :--- | :--- | :--- | :--- |
 | **01** | **E2E Autonomous Lifecycle** | Live pipeline + Pytest `test_e2e_demo_lifecycle.py` | **PASS** | Complete 14-stage workflow verified: Healthy -> Failure -> Alert -> Incident -> Evidence -> Diagnosis -> Approval -> Recovery -> Verification -> Resolution -> Analytics -> Reports. |
-| **02** | **Security Audit & Secret Remediation** | Repository grep, git log, `test_settings.py` | **PASS** | Removed hardcoded `autoheal_alertmanager_webhook_hmac_secret_key_12345`. Configured Pydantic validator to fail startup in prod/staging if missing or default. Documented in `SECURITY.md`. |
+| **02** | **Security Audit & Secret Remediation** | Repository grep, git log, `test_settings.py`, `test_frontend_secret_security.py` | **PASS** | Removed hardcoded legacy secrets. Removed `NEXT_PUBLIC_ALERTMANAGER_SECRET` and `alertsApi` from frontend. Enforced server-side-only webhook validation. Added production fail-safes for `ALERTMANAGER_HMAC_SECRET` and `SECRET_KEY`. |
 | **03** | **Monitoring Pipeline** | Alertmanager webhook HMAC, `test_alerts.py` | **PASS** | Webhook accepts authenticated Alertmanager payloads via Bearer / HMAC-SHA256. Rejects unauthenticated/tampered requests with 401/403. |
 | **04** | **Incident Management & Deduplication** | `test_alerts.py`, `test_incidents.py` | **PASS** | Fingerprint deduplication verified. Duplicate resolved alerts do not duplicate or reopen resolved incidents (`test_duplicate_resolved_alert_does_not_reopen_or_duplicate_incident`). |
 | **05** | **AI Diagnosis & Heuristic Fallback** | `test_ai_diagnosis.py` | **PASS** | Gemini 1.5 Pro prompt sanitization, JSON schema extraction, allowlist enforcement, and deterministic heuristic fallback tested against timeout and malformed outputs. |
@@ -35,12 +37,12 @@ All seventeen functional, architectural, and security domains outlined in the Ph
 | **07** | **False-Positive Mathematical Accuracy** | `test_analytics.py`, `test_e2e_demo_lifecycle.py` | **PASS** | True/False positive/negative metrics calculated: $\text{FPR} = \frac{\text{FP}}{\text{FP} + \text{TN}}$. Operator rejections are decoupled from alert detection accuracy. |
 | **08** | **Database Reliability & Migrations** | Alembic migrations, `test_backup_restore.py` | **PASS** | 16 multi-tenant tables. Connection pooling (`pool_size=20`, `max_overflow=10`, `pool_pre_ping=True`). Automated backups with SHA-256 and 3-guard safe restore validated. |
 | **09** | **Celery & Redis Reliability** | `test_worker.py`, Celery configuration | **PASS** | `task_acks_late=True`, `task_reject_on_worker_lost=True`, `task_time_limit=180s`, `task_soft_time_limit=120s`, task idempotency guard verified. |
-| **10** | **Frontend Completion & Security** | Next.js build, TypeScript typecheck | **PASS** | Next.js 16 + React 19 UI preserved. Overview, Services, Incidents, Recovery Center, Analytics, Reports, Settings verified with empty/loading/error states. |
+| **10** | **Frontend Completion & Security** | Next.js build, TypeScript typecheck | **PASS** | Next.js 16 + React 19 UI preserved. Overview, Services, Incidents, Recovery Center, Analytics, Reports, Settings verified with empty/loading/error states. Zero secret tokens in client bundles. |
 | **11** | **Auditability & Reporting** | `test_reports.py`, ReportLab generator | **PASS** | PDF post-mortem generation and JSON summary reports verified with strict multi-tenant organization isolation. |
 | **12** | **Performance & Concurrency** | `test_sse_ticket_security.py`, async pooling | **PASS** | Single-use SSE tickets burn atomically on handshake. Replay attacks rejected with 401. Connection pooling supports high concurrent async traffic. |
 | **13** | **Docker & Infrastructure Hardening** | `test_docker_compose.py`, Compose config | **PASS** | Multi-stage Dockerfiles. Unprivileged non-root users (`autoheal:10001`, `nextjs:1001`). Zero Docker socket mounts. No public DB/Redis ports in production. |
 | **14** | **Documentation Deliverables** | 12 Markdown documentation files | **PASS** | All 12 required files created, structured, cross-referenced with absolute file links: `README.md`, `ARCHITECTURE.md`, `SECURITY.md`, `API_DOCUMENTATION.md`, `LOCAL_SETUP.md`, `DOCKER_SETUP.md`, `MONITORING_SETUP.md`, `RECOVERY_ENGINE.md`, `DATABASE_BACKUP_RESTORE.md`, `TROUBLESHOOTING.md`, `PHASE_5_ACCEPTANCE_REPORT.md`, `PHASE_6_READINESS_REPORT.md`. |
-| **15** | **Automated Testing Suite** | Full pytest suite (136 tests) | **PASS** | 136 passed, 0 failed in 57.55s. TypeScript typecheck 0 errors. Next.js production build passes. |
+| **15** | **Automated Testing Suite** | Full pytest suite (143 tests) | **PASS** | 143 passed, 0 failed in 65.15s. TypeScript typecheck 0 errors. Next.js production build passes. |
 | **16** | **Phase 6 Readiness Assessment** | Production evaluation & roadmap | **PASS** | Comprehensive readiness audit completed in `PHASE_6_READINESS_REPORT.md`. Phase 6 implementation has NOT been started. |
 | **17** | **Git & CI/CD Verification** | Git log, clean tree, GitHub Actions CI | **PASS** | Clean working tree, documented commits, CI passes 100% across all 4 jobs. |
 
@@ -50,7 +52,7 @@ All seventeen functional, architectural, and security domains outlined in the Ph
 
 Execution summary from `pytest backend/tests`:
 ```text
-======================= 136 passed, 5 warnings in 57.55s =======================
+======================= 143 passed, 5 warnings in 65.15s =======================
 ```
 
 Key test modules verified:
@@ -62,12 +64,31 @@ Key test modules verified:
 6. `backend/tests/test_database_ssl_security.py`: SSL mode normalization (`sslmode=require` -> `ssl=require`), custom CA bundle support, hostname verification.
 7. `backend/tests/test_docker_compose.py`: Compose service topology, unprivileged users, zero Docker socket mounts, no exposed DB/Redis ports in production.
 8. `backend/tests/test_e2e_demo_lifecycle.py`: 14-stage end-to-end integration workflow.
-9. `backend/tests/test_readiness.py`: Public health, liveness, and deep database/redis readiness probes.
-10. `backend/tests/test_recovery_engine.py`: Cooldown gating, retry limits, approval transitions, post-recovery health verification.
-11. `backend/tests/test_redis_tls_security.py`: Rediss:// URI parsing, certificate verification enforcement in production, CA file validation.
-12. `backend/tests/test_reverse_proxy_security.py`: Trusted CIDR validation, wildcard proxy rejection in production.
-13. `backend/tests/test_settings.py`: Production fail-safe validation for missing/insecure HMAC secret, wildcard proxy rejection.
-14. `backend/tests/test_sse_ticket_security.py`: Single-use ticket issuance, atomic burn on handshake, replay rejection, expiry.
+9. `backend/tests/test_frontend_secret_security.py`: Server-side-only webhook boundary, NEXT_PUBLIC_* variable allowlist enforcement, compiled bundle scan.
+10. `backend/tests/test_readiness.py`: Public health, liveness, and deep database/redis readiness probes.
+11. `backend/tests/test_recovery_engine.py`: Cooldown gating, retry limits, approval transitions, post-recovery health verification.
+12. `backend/tests/test_redis_tls_security.py`: Rediss:// URI parsing, certificate verification enforcement in production, CA file validation.
+13. `backend/tests/test_reverse_proxy_security.py`: Trusted CIDR validation, wildcard proxy rejection in production.
+14. `backend/tests/test_settings.py`: Production fail-safe validation for missing/insecure HMAC secret, wildcard proxy rejection, SECRET_KEY entropy & default check.
+15. `backend/tests/test_sse_ticket_security.py`: Single-use ticket issuance, atomic burn on handshake, replay rejection, expiry.
+
+---
+
+## 4. Experiment Data Authenticity & Baseline Assessment
+
+* **Persisted Experiment Records**:
+  The empirical experiment suite (`scripts/run_experiments.py`) executed exactly **5 controlled fault injection trials** recorded in `monitoring/experiment_results.json`:
+  - Total Trials: 5
+  - True Positives (TP): 5 (injected faults correctly detected as incidents)
+  - False Positives (FP): 0
+  - True Negatives (TN): 0 (no healthy observation windows during fault-injection run)
+  - False Negatives (FN): 0
+  - Successful Remediations: 4 (80%)
+  - Operator Rejections: 1 (20%, tested operator override scenario)
+  - False Positive Rate: Correctly reported as `null` with status `"unavailable (insufficient healthy observation windows)"`.
+* **Authenticity Clarification**:
+  Any mention of a "1,000 observation-window baseline" in prior conversational discussion represents a hypothetical statistical projection and **NOT** genuinely persisted production operational telemetry. All empirical figures in AutoHeal documentation reflect actual test runs and persisted records only.
+
 
 ---
 

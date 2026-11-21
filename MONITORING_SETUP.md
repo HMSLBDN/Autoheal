@@ -154,6 +154,11 @@ FastAPI validates every incoming webhook request in `app.api.deps.verify_webhook
    - The token is compared against `settings.ALERTMANAGER_HMAC_SECRET` using constant-time string comparison (`hmac.compare_digest`) to prevent timing side-channel attacks.
 3. **Production Fail-Safe**:
    - In `production` or `staging`, the application strictly refuses to start if `ALERTMANAGER_HMAC_SECRET` is unset or matches known development defaults (`validate_security_settings`).
+4. **Server-Side-Only Secret Boundary**:
+   - Webhook authentication is strictly server-to-server between Alertmanager and FastAPI.
+   - The webhook secret is **never** sent to the client browser, **never** embedded in `NEXT_PUBLIC_*` variables, and **never** stored in browser storage.
+   - Frontend components communicate with the backend exclusively through authenticated REST endpoints using JWT access tokens.
+   - Automated regression tests (`backend/tests/test_frontend_secret_security.py`) continuously enforce this boundary.
 
 ---
 

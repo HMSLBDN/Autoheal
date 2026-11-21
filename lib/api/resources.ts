@@ -130,22 +130,6 @@ export const analyticsApi = {
   },
 }
 
-export const alertsApi = {
-  async sendWebhook(payload: unknown, secret?: string) {
-    return apiRequest<{ status: string; processed_alerts: number; incidents_created: number; incidents_updated: number; details: string[] }>(
-      '/api/v1/alerts/webhook',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Alertmanager-Secret': secret || process.env.NEXT_PUBLIC_ALERTMANAGER_SECRET || '',
-        },
-        body: JSON.stringify(payload),
-      }
-    )
-  },
-}
-
 export type WorkspaceSettings = {
   organization: {
     id: string

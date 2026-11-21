@@ -166,3 +166,31 @@ def test_settings_succeeds_with_strong_hmac_secret_in_production():
     )
     assert prod_settings.ALERTMANAGER_HMAC_SECRET == "strong_production_dedicated_webhook_secret_998877"
 
+
+def test_settings_fails_safe_on_missing_or_insecure_secret_key_in_production():
+    """In production, settings validation raises ValueError if SECRET_KEY is default, empty, or too short."""
+    from app.config import Settings
+
+    with pytest.raises(ValueError, match="SECRET_KEY is missing, too short"):
+        Settings(
+            APP_ENV="production",
+            ALERTMANAGER_HMAC_SECRET="strong_production_dedicated_webhook_secret_998877",
+            SECRET_KEY="autoheal_insecure_dev_secret_change_in_production_1234567890",
+            REDIS_SSL_CERT_REQS="required",
+            REDIS_SSL_CHECK_HOSTNAME=True,
+            FORWARDED_ALLOW_IPS="10.0.0.1",
+            DB_SSL_MODE="require",
+        )
+
+    with pytest.raises(ValueError, match="SECRET_KEY is missing, too short"):
+        Settings(
+            APP_ENV="production",
+            ALERTMANAGER_HMAC_SECRET="strong_production_dedicated_webhook_secret_998877",
+            SECRET_KEY="too_short_key",
+            REDIS_SSL_CERT_REQS="required",
+            REDIS_SSL_CHECK_HOSTNAME=True,
+            FORWARDED_ALLOW_IPS="10.0.0.1",
+            DB_SSL_MODE="require",
+        )
+
+

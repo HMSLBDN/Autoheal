@@ -89,7 +89,20 @@ Any attempt by a Viewer to execute or approve a recovery action fails closed wit
      ```
   3. Production and staging deployments will refuse to start if this legacy secret or default placeholder is used.
 
-### 5.2 Secret Rotation Instructions for Production
+### 5.3 Complete Removal of Frontend Webhook Secret Exposure & Server-Side-Only Boundary
+* **Identified Vulnerability**: A previous development client (`lib/api/resources.ts`) contained an unreferenced client-side helper referencing `process.env.NEXT_PUBLIC_ALERTMANAGER_SECRET`.
+* **Immediate Remediation**:
+  1. `alertsApi` and `process.env.NEXT_PUBLIC_ALERTMANAGER_SECRET` were **completely deleted** from frontend code.
+  2. The Alertmanager webhook endpoint (`/api/v1/alerts/webhook`) is strictly a server-to-server interface called exclusively by Prometheus Alertmanager.
+  3. No webhook secrets or HMAC signing keys are ever sent to client browsers, embedded in Next.js public environment variables, or stored in `localStorage`/`sessionStorage`.
+  4. The production Next.js compiled JavaScript bundle is scanned during CI and confirmed to contain zero secret strings or unauthorized `NEXT_PUBLIC_*` variables.
+  5. An automated regression suite (`backend/tests/test_frontend_secret_security.py`) enforces that only allowlisted public variables (`NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_DEMO_MODE`) can exist in frontend source files.
+
+### 5.4 Production Secret Key Startup Fail-Safe
+In addition to Alertmanager HMAC verification, `backend/app/config.py` enforces that in `production` and `staging` environments:
+* `SECRET_KEY` must be explicitly provided via environment variable, must not match insecure defaults (`autoheal_insecure_dev_secret_change_in_production_1234567890`), and must contain at least 32 characters of entropy.
+* Attempting to start the application with default, empty, or short keys raises a `ValueError` immediately, failing closed.
+
 To rotate the Alertmanager HMAC/Bearer secret in any deployed environment:
 
 1. **Generate a High-Entropy Secret**:
