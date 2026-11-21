@@ -97,24 +97,29 @@ class Settings(BaseSettings):
     def assemble_database_url(cls, value: str) -> str:
         if not value:
             return value
-        parsed = urllib.parse.urlsplit(value)
-        query_params = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-
-        if "sslmode" in query_params:
-            sslmode_val = query_params.pop("sslmode")[0]
-            valid_modes = {"disable", "prefer", "require", "verify-ca", "verify-full"}
-            if sslmode_val not in valid_modes:
-                raise ValueError(
-                    f"Invalid PostgreSQL sslmode: '{sslmode_val}'. Supported modes are: {sorted(valid_modes)}"
-                )
-            query_params["ssl"] = [sslmode_val]
-
-        new_query = urllib.parse.urlencode([(k, v) for k, vs in query_params.items() for v in vs])
-        scheme = parsed.scheme
-        if scheme in ("postgres", "postgresql"):
-            scheme = "postgresql+asyncpg"
-
-        return urllib.parse.urlunsplit((scheme, parsed.netloc, parsed.path, new_query, parsed.fragment))
+        # Preserve SQLite URLs untouched (e.g. sqlite+aiosqlite:///:memory:)
+        if value.startswith("sqlite"):
+            return value
+        try:
+            from sqlalchemy.engine import make_url
+            url = make_url(value)
+            driver = url.drivername
+            if driver in ("postgres", "postgresql"):
+                driver = "postgresql+asyncpg"
+            query = dict(url.query)
+            if "sslmode" in query:
+                sslmode_val = query.pop("sslmode")
+                valid_modes = {"disable", "prefer", "require", "verify-ca", "verify-full"}
+                if sslmode_val not in valid_modes:
+                    raise ValueError(
+                        f"Invalid PostgreSQL sslmode: '{sslmode_val}'. Supported modes are: {sorted(valid_modes)}"
+                    )
+                query["ssl"] = sslmode_val
+            return url.set(drivername=driver, query=query).render_as_string(hide_password=False)
+        except ValueError:
+            raise
+        except Exception:
+            return value
 
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10

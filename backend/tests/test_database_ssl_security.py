@@ -19,6 +19,29 @@ def test_database_url_normalization_local_unencrypted():
     assert settings.DATABASE_URL == "postgresql+asyncpg://autoheal_user:dev_pass@localhost:5432/autoheal_db"
 
 
+def test_database_url_preserves_sqlite_in_memory():
+    """sqlite+aiosqlite:///:memory: must be preserved exactly without path or slash corruption."""
+    settings = Settings(
+        APP_ENV="test",
+        DATABASE_URL="sqlite+aiosqlite:///:memory:",
+    )
+    assert settings.DATABASE_URL == "sqlite+aiosqlite:///:memory:"
+
+
+def test_database_validation_rejects_empty_or_invalid_url():
+    """Empty or unparseable database URLs must raise a clear ValueError."""
+    from app.database import validate_database_url
+
+    with pytest.raises(ValueError, match="DATABASE_URL is not configured"):
+        validate_database_url("")
+
+    with pytest.raises(ValueError, match="DATABASE_URL is not configured"):
+        validate_database_url("   ")
+
+    with pytest.raises(ValueError, match="does not specify a supported database driver"):
+        validate_database_url("http://not-a-database.com")
+
+
 def test_database_url_normalization_sslmode_require():
     """sslmode=require must be safely normalized to asyncpg-compatible ssl=require."""
     settings = Settings(

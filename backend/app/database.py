@@ -96,20 +96,45 @@ def get_engine_args(database_url: str) -> dict:
     return engine_kwargs
 
 
-# Create AsyncEngine singleton
-engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL,
-    **get_engine_args(settings.DATABASE_URL),
-)
+def validate_database_url(url: str) -> None:
+    """
+    Validates that the provided DATABASE_URL is non-empty and parsable by SQLAlchemy.
+    """
+    if not url or not url.strip():
+        raise ValueError("DATABASE_URL is not configured. A valid SQLAlchemy connection string is required.")
+    try:
+        from sqlalchemy.engine import make_url
+        parsed = make_url(url)
+        if not parsed.drivername or not parsed.drivername.startswith(("postgresql", "sqlite", "postgres")):
+            raise ValueError(
+                f"DATABASE_URL '{url}' does not specify a supported database driver. "
+                "Supported dialects are PostgreSQL and SQLite."
+            )
+    except Exception as exc:
+        raise ValueError(f"Invalid DATABASE_URL configuration '{url}': {exc}") from exc
 
-# Async session factory
-async_session_factory = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autocommit=False,
-    autoflush=False,
-)
+
+def create_engine_and_session_factory(db_url: Optional[str] = None):
+    """
+    Factory function creating an AsyncEngine and async_sessionmaker pair.
+    Validates the connection URL before instantiation.
+    """
+    url = db_url or settings.DATABASE_URL
+    validate_database_url(url)
+    engine_args = get_engine_args(url)
+    eng = create_async_engine(url, **engine_args)
+    factory = async_sessionmaker(
+        bind=eng,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autocommit=False,
+        autoflush=False,
+    )
+    return eng, factory
+
+
+# Create AsyncEngine singleton and session factory
+engine, async_session_factory = create_engine_and_session_factory()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
