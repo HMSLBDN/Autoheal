@@ -6,6 +6,7 @@ Client Certificate issuance, rotation, CRL/revocation enforcement, and live TLS 
 
 from datetime import datetime, timedelta, timezone
 import hashlib
+import ipaddress
 import logging
 import os
 import ssl
@@ -442,6 +443,138 @@ class AgentCA:
                 "handshake_success": False,
                 "error": str(e),
             }
+        finally:
+            for p in temp_files:
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+
+    @classmethod
+    def test_live_tcp_socket_mtls_handshake(
+        cls,
+        organization_id: UUID,
+        client_cert_pem: Optional[str] = None,
+        client_key_pem: Optional[str] = None,
+        custom_ca_pem: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Executes a real local TCP socket-level mutual TLS handshake
+        over loopback (127.0.0.1) on an ephemeral port, verifying actual
+        network-layer TLS handshake negotiation with client certificate authentication.
+        """
+        import socket
+        import threading
+
+        ca_key, ca_cert = cls.get_or_create_org_ca(organization_id)
+        ca_pem = custom_ca_pem or ca_cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
+
+        # Generate temporary server cert signed by CA
+        srv_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        now = datetime.now(timezone.utc)
+        srv_cert = (
+            x509.CertificateBuilder()
+            .subject_name(x509.Name([
+                x509.NameAttribute(NameOID.COMMON_NAME, "127.0.0.1"),
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, f"AutoHeal Server {str(organization_id)[:8]}"),
+            ]))
+            .issuer_name(ca_cert.subject)
+            .public_key(srv_key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now - timedelta(minutes=5))
+            .not_valid_after(now + timedelta(days=1))
+            .add_extension(
+                x509.SubjectAlternativeName([
+                    x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+                    x509.DNSName("localhost"),
+                ]),
+                critical=False,
+            )
+            .sign(ca_key, hashes.SHA256())
+        )
+        srv_pem = srv_cert.public_bytes(serialization.Encoding.PEM).decode("utf-8")
+        srv_key_pem = srv_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ).decode("utf-8")
+
+        temp_files = []
+        try:
+            def _write_temp(data: str) -> str:
+                f = tempfile.NamedTemporaryFile("w", delete=False)
+                f.write(data)
+                f.flush()
+                f.close()
+                temp_files.append(f.name)
+                return f.name
+
+            ca_file = _write_temp(ca_pem)
+            srv_cert_file = _write_temp(srv_pem)
+            srv_key_file = _write_temp(srv_key_pem)
+
+            # Server SSL context requiring client certificate
+            server_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            server_ctx.verify_mode = ssl.CERT_REQUIRED
+            server_ctx.load_verify_locations(ca_file)
+            server_ctx.load_cert_chain(srv_cert_file, srv_key_file)
+
+            # Client SSL context
+            client_ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+            client_ctx.load_verify_locations(ca_file)
+            client_ctx.check_hostname = False
+
+            if client_cert_pem and client_key_pem:
+                cli_cert_file = _write_temp(client_cert_pem)
+                cli_key_file = _write_temp(client_key_pem)
+                client_ctx.load_cert_chain(cli_cert_file, cli_key_file)
+
+            server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            server_sock.bind(("127.0.0.1", 0))
+            port = server_sock.getsockname()[1]
+            server_sock.listen(1)
+
+            result: Dict[str, Any] = {"handshake_success": False}
+            server_error: List[Exception] = []
+
+            def server_worker():
+                try:
+                    conn, _ = server_sock.accept()
+                    with server_ctx.wrap_socket(conn, server_side=True) as ssl_conn:
+                        peer = ssl_conn.getpeercert()
+                        data = ssl_conn.recv(1024)
+                        ssl_conn.sendall(b"MTLS_AUTH_CONFIRMED: " + data)
+                        result["server_peer_cert"] = peer
+                        result["cipher_used"] = ssl_conn.cipher()[0]
+                        result["protocol"] = ssl_conn.version()
+                except Exception as exc:
+                    server_error.append(exc)
+                finally:
+                    server_sock.close()
+
+            th = threading.Thread(target=server_worker, daemon=True)
+            th.start()
+
+            try:
+                raw_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                raw_client.settimeout(3.0)
+                raw_client.connect(("127.0.0.1", port))
+                with client_ctx.wrap_socket(raw_client, server_hostname="127.0.0.1") as ssl_client:
+                    ssl_client.sendall(b"PING_AGENT_NODE")
+                    response = ssl_client.recv(1024)
+                    if b"MTLS_AUTH_CONFIRMED" in response:
+                        result["handshake_success"] = True
+                        result["client_verified_response"] = response.decode("utf-8")
+            except Exception as client_exc:
+                result["client_error"] = str(client_exc)
+            finally:
+                th.join(timeout=3.0)
+                if server_error:
+                    result["server_error"] = str(server_error[0])
+
+            return result
+        except Exception as outer_exc:
+            return {"handshake_success": False, "error": str(outer_exc)}
         finally:
             for p in temp_files:
                 try:
