@@ -6,13 +6,13 @@ import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import type { LucideIcon } from 'lucide-react'
 import { Activity, ArrowDownRight, CheckCircle2, Clock3, RefreshCw, Server, ShieldCheck } from 'lucide-react'
-import type { AnalyticsSummary, Incident, InfrastructureAgent, RecoveryAction, Service } from '@/types'
+import type { AnalyticsSummary, Anomaly, Incident, IncidentCorrelationGroup, InfrastructureAgent, IntelligenceOverview, ModelEvaluationMetric, Prediction, PreventiveRecommendation, RecoveryAction, Service, ServiceRisk } from '@/types'
 import { isApiConfigured, isDemoMode } from '@/lib/api/client'
-import { agentsApi, analyticsApi, healthApi, incidentsApi, recoveriesApi, servicesApi } from '@/lib/api/resources'
+import { agentsApi, analyticsApi, healthApi, incidentsApi, intelligenceApi, recoveriesApi, servicesApi } from '@/lib/api/resources'
 import { useRealtimeEvents } from '@/lib/api/events'
-import { demoAgents, demoAnalytics, demoIncidents, demoRecoveries, demoServices } from '@/lib/demo/mock-data'
+import { demoAgents, demoAnalytics, demoAnomalies, demoCorrelations, demoEvaluations, demoIncidents, demoIntelligenceOverview, demoPredictions, demoRecommendations, demoRecoveries, demoRiskScores, demoServices } from '@/lib/demo/mock-data'
 import { useDashboardControls } from '@/components/dashboard/dashboard-shell'
-import { AgentsView, AnalyticsView, IncidentTable, IncidentDetailView, MonitoringView, OverviewView, RecoveryTable, ReportsView, ServiceDetailView, ServiceTable, SettingsView } from '@/components/dashboard/data-views'
+import { AgentsView, AnalyticsView, IncidentTable, IncidentDetailView, IntelligenceView, MonitoringView, OverviewView, RecoveryTable, ReportsView, ServiceDetailView, ServiceTable, SettingsView } from '@/components/dashboard/data-views'
 
 type DialogState = { title: string; description: string; confirmLabel?: string; onConfirm?: () => Promise<void> | void }
 
@@ -80,6 +80,13 @@ export function DashboardView() {
   const analyticsResource = useSWR<AnalyticsSummary>(demoMode ? 'demo-analytics' : 'analytics', () => demoMode ? Promise.resolve(demoAnalytics) : analyticsApi.summary(), { fallbackData: demoMode ? demoAnalytics : undefined, revalidateOnFocus: false })
   const healthResource = useSWR<{ status: string }>(demoMode ? 'demo-health' : 'backend-health', () => demoMode ? Promise.resolve({ status: 'demo' }) : healthApi.get(), { fallbackData: demoMode ? { status: 'demo' } : undefined, revalidateOnFocus: false })
   const agentsResource = useSWR<InfrastructureAgent[]>(demoMode ? 'demo-agents' : 'agents', () => demoMode ? Promise.resolve(demoAgents) : agentsApi.list(), { fallbackData: demoMode ? demoAgents : undefined, revalidateOnFocus: false })
+  const intelligenceOverviewResource = useSWR<IntelligenceOverview>(demoMode ? 'demo-intelligence-overview' : 'intelligence-overview', () => demoMode ? Promise.resolve(demoIntelligenceOverview) : intelligenceApi.overview(), { fallbackData: demoMode ? demoIntelligenceOverview : undefined, revalidateOnFocus: false })
+  const predictionsResource = useSWR<Prediction[]>(demoMode ? 'demo-predictions' : 'predictions', () => demoMode ? Promise.resolve(demoPredictions) : intelligenceApi.predictions(), { fallbackData: demoMode ? demoPredictions : undefined, revalidateOnFocus: false })
+  const anomaliesResource = useSWR<Anomaly[]>(demoMode ? 'demo-anomalies' : 'anomalies', () => demoMode ? Promise.resolve(demoAnomalies) : intelligenceApi.anomalies(), { fallbackData: demoMode ? demoAnomalies : undefined, revalidateOnFocus: false })
+  const riskScoresResource = useSWR<ServiceRisk[]>(demoMode ? 'demo-risk-scores' : 'risk-scores', () => demoMode ? Promise.resolve(demoRiskScores) : intelligenceApi.riskScores(), { fallbackData: demoMode ? demoRiskScores : undefined, revalidateOnFocus: false })
+  const recommendationsResource = useSWR<PreventiveRecommendation[]>(demoMode ? 'demo-recommendations' : 'recommendations', () => demoMode ? Promise.resolve(demoRecommendations) : intelligenceApi.preventiveRecommendations(), { fallbackData: demoMode ? demoRecommendations : undefined, revalidateOnFocus: false })
+  const correlationsResource = useSWR<IncidentCorrelationGroup[]>(demoMode ? 'demo-correlations' : 'correlations', () => demoMode ? Promise.resolve(demoCorrelations) : intelligenceApi.correlations(), { fallbackData: demoMode ? demoCorrelations : undefined, revalidateOnFocus: false })
+  const evaluationsResource = useSWR<ModelEvaluationMetric[]>(demoMode ? 'demo-evaluations' : 'evaluations', () => demoMode ? Promise.resolve(demoEvaluations) : intelligenceApi.modelEvaluations(), { fallbackData: demoMode ? demoEvaluations : undefined, revalidateOnFocus: false })
 
   // Real-time Server-Sent Events (SSE) updates
   useRealtimeEvents({
@@ -265,6 +272,21 @@ export function DashboardView() {
     }
   }
 
+  async function handleRecommendationStatusUpdate(id: string, status: string) {
+    if (demoMode) {
+      setToast(`Recommendation updated to ${status} (Demo)`)
+      return
+    }
+    try {
+      await intelligenceApi.updateRecommendationStatus(id, status)
+      setToast(`Recommendation marked as ${status}`)
+      recommendationsResource.mutate()
+      intelligenceOverviewResource.mutate()
+    } catch {
+      setToast('Failed to update recommendation status.')
+    }
+  }
+
   const matchingIncidents = filteredIncidents.filter((incident) => (severityFilter === 'all' || incident.severity === severityFilter) && (statusFilter === 'all' || incident.status === statusFilter) && (serviceFilter === 'all' || incident.serviceId === serviceFilter) && isWithinDateRange(incident.detectedAt, incidentRange))
   const commonNotices = <>{notice}{loading && <div className="notice-strip live-notice" role="status">Loading current backend data. Sample values are not substituted in live mode.</div>}{apiErrors.length > 0 && <div className="error-strip" role="alert"><strong>Backend data could not be loaded.</strong> {apiErrors[0] instanceof Error ? apiErrors[0].message : 'Request failed. Check the API URL and server response.'} Sample values are not substituted in live mode. <button className="table-sort" onClick={refreshData}>Retry</button></div>}</>
   const dialogLayer = dialog && <ConfirmDialog dialog={dialog} onClose={() => setDialog(null)} busy={busyId !== ''} />
@@ -310,6 +332,27 @@ export function DashboardView() {
 
   if (page === 'reports') {
     return <>{commonNotices}<ReportsView incidents={filteredIncidents} demoMode={demoMode} onDownload={downloadReport} busyId={busyId} />{dialogLayer}{toastLayer}</>
+  }
+
+  if (page === 'intelligence') {
+    return (
+      <>
+        {commonNotices}
+        <IntelligenceView
+          overview={intelligenceOverviewResource.data}
+          predictions={predictionsResource.data ?? demoPredictions}
+          anomalies={anomaliesResource.data ?? demoAnomalies}
+          riskScores={riskScoresResource.data ?? demoRiskScores}
+          recommendations={recommendationsResource.data ?? demoRecommendations}
+          correlations={correlationsResource.data ?? demoCorrelations}
+          evaluations={evaluationsResource.data ?? demoEvaluations}
+          demoMode={demoMode}
+          onStatusUpdate={handleRecommendationStatusUpdate}
+        />
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'agents') {

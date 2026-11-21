@@ -1,0 +1,50 @@
+{
+  "evaluated_at": "2026-11-21T10:14:42.244478+00:00",
+  "is_synthetic_evaluation": true,
+  "models": [
+    {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0,
+      "mean_latency_ms": 0.006,
+      "sample_count": 100,
+      "tp": 50,
+      "fp": 0,
+      "fn": 0,
+      "tn": 50,
+      "dataset_name": "synthetic_telemetry_corpus_v1",
+      "is_synthetic": true,
+      "model_name": "AnomalyDetector-ZScore-EWMA",
+      "evaluation_type": "anomaly_detection"
+    },
+    {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0,
+      "false_positive_rate": 0.0,
+      "false_negative_rate": 0.0,
+      "mean_absolute_error": 5.7143,
+      "mean_latency_ms": 0.009,
+      "sample_count": 56,
+      "dataset_name": "synthetic_capacity_exhaustion_v1",
+      "is_synthetic": true,
+      "model_name": "HorizonForecaster-Linear-EWMA",
+      "evaluation_type": "time_series_prediction"
+    },
+    {
+      "precision": 0.75,
+      "recall": 1.0,
+      "f1_score": 0.8571,
+      "false_positive_rate": 1.0,
+      "false_negative_rate": 0.0,
+      "mean_latency_ms": 0.003,
+      "sample_count": 60,
+      "dataset_name": "synthetic_incident_scenarios_v1",
+      "is_synthetic": true,
+      "model_name": "DeterministicHeuristic-SRE-Engine",
+      "evaluation_type": "incident_diagnosis"
+    }
+  ]
+}

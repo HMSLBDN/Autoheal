@@ -1,4 +1,23 @@
-import type { AnalyticsSummary, Incident, IncidentEvent, IncidentEvidence, InfrastructureAgent, RecoveryAction, RecoveryPolicy, Service, ServiceMetrics } from '@/types'
+import type {
+  AnalyticsSummary,
+  Anomaly,
+  DeploymentImpact,
+  Incident,
+  IncidentAnalysis,
+  IncidentCorrelationGroup,
+  IncidentEvent,
+  IncidentEvidence,
+  InfrastructureAgent,
+  IntelligenceOverview,
+  ModelEvaluationMetric,
+  Prediction,
+  PreventiveRecommendation,
+  RecoveryAction,
+  RecoveryPolicy,
+  Service,
+  ServiceMetrics,
+  ServiceRisk,
+} from '@/types'
 import { apiBlob, apiRequest, asArray, asObject, ApiError, AuthUser, setAccessToken, setStoredUser } from './client'
 
 function validateService(value: unknown): Service {
@@ -293,5 +312,57 @@ export const policiesApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ service_id: serviceId, action, agent_id: agentId }),
     })
+  },
+}
+
+export const intelligenceApi = {
+  async overview(signal?: AbortSignal): Promise<IntelligenceOverview> {
+    return apiRequest<IntelligenceOverview>('/api/v1/intelligence/overview', { signal })
+  },
+  async predictions(serviceId?: string, signal?: AbortSignal): Promise<Prediction[]> {
+    const query = serviceId ? `?service_id=${encodeURIComponent(serviceId)}` : ''
+    return apiRequest<Prediction[]>(`/api/v1/intelligence/predictions${query}`, { signal })
+  },
+  async anomalies(serviceId?: string, status?: string, signal?: AbortSignal): Promise<Anomaly[]> {
+    const params = new URLSearchParams()
+    if (serviceId) params.append('service_id', serviceId)
+    if (status) params.append('status', status)
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return apiRequest<Anomaly[]>(`/api/v1/intelligence/anomalies${query}`, { signal })
+  },
+  async riskScores(signal?: AbortSignal): Promise<ServiceRisk[]> {
+    return apiRequest<ServiceRisk[]>('/api/v1/intelligence/risk-scores', { signal })
+  },
+  async serviceRisk(serviceId: string, signal?: AbortSignal): Promise<ServiceRisk> {
+    return apiRequest<ServiceRisk>(`/api/v1/intelligence/risk-scores/${encodeURIComponent(serviceId)}`, { signal })
+  },
+  async correlations(incidentId?: string, signal?: AbortSignal): Promise<IncidentCorrelationGroup[]> {
+    const path = incidentId
+      ? `/api/v1/intelligence/correlations/${encodeURIComponent(incidentId)}`
+      : '/api/v1/intelligence/correlations'
+    return apiRequest<IncidentCorrelationGroup[]>(path, { signal })
+  },
+  async deploymentImpact(serviceId: string, signal?: AbortSignal): Promise<DeploymentImpact> {
+    return apiRequest<DeploymentImpact>(`/api/v1/intelligence/deployment-impact/${encodeURIComponent(serviceId)}`, { signal })
+  },
+  async preventiveRecommendations(serviceId?: string, status?: string, signal?: AbortSignal): Promise<PreventiveRecommendation[]> {
+    const params = new URLSearchParams()
+    if (serviceId) params.append('service_id', serviceId)
+    if (status) params.append('status', status)
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return apiRequest<PreventiveRecommendation[]>(`/api/v1/intelligence/preventive-recommendations${query}`, { signal })
+  },
+  async updateRecommendationStatus(id: string, status: string): Promise<PreventiveRecommendation> {
+    return apiRequest<PreventiveRecommendation>(`/api/v1/intelligence/preventive-recommendations/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+  },
+  async incidentAnalysis(incidentId: string, signal?: AbortSignal): Promise<IncidentAnalysis> {
+    return apiRequest<IncidentAnalysis>(`/api/v1/intelligence/incident-analysis/${encodeURIComponent(incidentId)}`, { signal })
+  },
+  async modelEvaluations(signal?: AbortSignal): Promise<ModelEvaluationMetric[]> {
+    return apiRequest<ModelEvaluationMetric[]>('/api/v1/intelligence/model-evaluation', { signal })
   },
 }

@@ -26,6 +26,14 @@ from app.models.recovery import (
 from app.models.metric import ServiceMetric
 from app.models.audit import AuditLog
 from app.models.agent import InfrastructureAgent
+from app.models.intelligence import (
+    AnomalyEvent,
+    PredictiveInsight,
+    ServiceRiskScore,
+    IncidentCorrelation,
+    PreventiveRecommendation,
+    ModelEvaluationRecord,
+)
 
 __all__ = [
     "Base",
@@ -48,4 +56,10 @@ __all__ = [
     "ServiceMetric",
     "AuditLog",
     "InfrastructureAgent",
+    "AnomalyEvent",
+    "PredictiveInsight",
+    "ServiceRiskScore",
+    "IncidentCorrelation",
+    "PreventiveRecommendation",
+    "ModelEvaluationRecord",
 ]

@@ -5,9 +5,24 @@ import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, CheckCircle2, CircleAlert, Clock3, Cpu, Download, Gauge, MemoryStick, Server, ShieldCheck } from 'lucide-react'
-import type { AnalyticsSummary, Incident, InfrastructureAgent, RecoveryAction, RecoveryPolicy, Service, ServiceMetrics } from '@/types'
-import { agentsApi, policiesApi, servicesApi, settingsApi } from '@/lib/api/resources'
+import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, Brain, CheckCircle2, CircleAlert, Clock3, Cpu, Download, Gauge, Lightbulb, MemoryStick, Network, Server, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react'
+import type {
+  AnalyticsSummary,
+  Anomaly,
+  Incident,
+  IncidentCorrelationGroup,
+  InfrastructureAgent,
+  IntelligenceOverview,
+  ModelEvaluationMetric,
+  Prediction,
+  PreventiveRecommendation,
+  RecoveryAction,
+  RecoveryPolicy,
+  Service,
+  ServiceMetrics,
+  ServiceRisk,
+} from '@/types'
+import { agentsApi, intelligenceApi, policiesApi, servicesApi, settingsApi } from '@/lib/api/resources'
 import { demoServices } from '@/lib/demo/mock-data'
 import { isApiConfigured } from '@/lib/api/client'
 import { IncidentAreaChart, AvailabilityChart } from '@/components/dashboard/charts'
@@ -355,6 +370,524 @@ export function AgentsView({
           />
         )}
       </section>
+    </>
+  )
+}
+
+export function IntelligenceView({
+  overview,
+  predictions,
+  anomalies,
+  riskScores,
+  recommendations,
+  evaluations,
+  correlations,
+  demoMode,
+  onStatusUpdate,
+}: {
+  overview?: IntelligenceOverview
+  predictions: Prediction[]
+  anomalies: Anomaly[]
+  riskScores: ServiceRisk[]
+  recommendations: PreventiveRecommendation[]
+  evaluations: ModelEvaluationMetric[]
+  correlations: IncidentCorrelationGroup[]
+  demoMode: boolean
+  onStatusUpdate?: (id: string, status: string) => void
+}) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'predictions' | 'risk' | 'correlations' | 'recommendations' | 'evaluations'>('overview')
+
+  const highRiskCount = overview?.highRiskServicesCount ?? riskScores.filter((r) => r.riskScore >= 60).length
+  const activePredCount = overview?.activePredictionsCount ?? predictions.length
+  const detectedAnomCount = overview?.detectedAnomaliesCount ?? anomalies.length
+  const openRecCount = overview?.openRecommendationsCount ?? recommendations.filter((r) => r.status === 'open').length
+
+  return (
+    <>
+      <div className="dashboard-heading">
+        <div>
+          <h1>AI Intelligence & Predictive Operations</h1>
+          <p>Early time-series anomaly detection, explainable risk scoring, and cross-incident correlation.</p>
+        </div>
+        <div className="dashboard-toolbar">
+          <span className={`demo-label ${demoMode ? '' : 'live'}`}>
+            <span className="status-dot" />
+            {demoMode ? 'DEMO DATA' : 'LIVE API'}
+          </span>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            <button
+              className={`dash-button ${activeTab === 'overview' ? 'primary' : ''}`}
+              onClick={() => setActiveTab('overview')}
+            >
+              <Brain size={12} />Overview
+            </button>
+            <button
+              className={`dash-button ${activeTab === 'predictions' ? 'primary' : ''}`}
+              onClick={() => setActiveTab('predictions')}
+            >
+              <TrendingUp size={12} />Predictions ({predictions.length})
+            </button>
+            <button
+              className={`dash-button ${activeTab === 'risk' ? 'primary' : ''}`}
+              onClick={() => setActiveTab('risk')}
+            >
+              <ShieldCheck size={12} />Risk Scores ({riskScores.length})
+            </button>
+            <button
+              className={`dash-button ${activeTab === 'correlations' ? 'primary' : ''}`}
+              onClick={() => setActiveTab('correlations')}
+            >
+              <Network size={12} />Correlations ({correlations.length})
+            </button>
+            <button
+              className={`dash-button ${activeTab === 'recommendations' ? 'primary' : ''}`}
+              onClick={() => setActiveTab('recommendations')}
+            >
+              <Lightbulb size={12} />Recommendations ({openRecCount})
+            </button>
+            <button
+              className={`dash-button ${activeTab === 'evaluations' ? 'primary' : ''}`}
+              onClick={() => setActiveTab('evaluations')}
+            >
+              <Sparkles size={12} />Model Benchmarks
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {activeTab === 'overview' && (
+        <>
+          <div className="metric-grid metric-grid-five" style={{ marginBottom: 16 }}>
+            <MetricCard label="Active predictions" value={String(activePredCount).padStart(2, '0')} detail="Telemetry forecasts" icon={TrendingUp} tone="teal" />
+            <MetricCard label="Detected anomalies" value={String(detectedAnomCount).padStart(2, '0')} detail="Statistical deviations" icon={Activity} tone="amber" />
+            <MetricCard label="High risk services" value={String(highRiskCount).padStart(2, '0')} detail="Score &gt;= 60/100" icon={CircleAlert} tone={highRiskCount > 0 ? 'amber' : 'teal'} />
+            <MetricCard label="Open recommendations" value={String(openRecCount).padStart(2, '0')} detail="Actionable advisory" icon={Lightbulb} tone="violet" />
+            <MetricCard label="Active correlations" value={String(correlations.length).padStart(2, '0')} detail="Grouped root causes" icon={Network} tone="teal" />
+          </div>
+
+          <section className="dash-card panel" style={{ marginBottom: 16 }}>
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Top Service Health Risk Scores</h2>
+                <p className="panel-subtitle">Explainable composite 0-100 risk scores calculated from multi-signal telemetry.</p>
+              </div>
+            </div>
+            {riskScores.length > 0 ? (
+              <div className="table-responsive">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Risk Score</th>
+                      <th>Category</th>
+                      <th>Key Contributing Factors</th>
+                      <th>CPU / Memory Trend</th>
+                      <th>7d Incidents</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {riskScores.slice(0, 5).map((risk) => (
+                      <tr key={risk.id}>
+                        <td>
+                          <span className="table-primary-link">{risk.serviceName}</span>
+                          <small className="table-subtext">{risk.serviceId}</small>
+                        </td>
+                        <td>
+                          <strong style={{ fontSize: '15px', color: risk.riskScore >= 75 ? '#F87171' : risk.riskScore >= 50 ? '#FBBF24' : '#34D399' }}>
+                            {risk.riskScore} / 100
+                          </strong>
+                        </td>
+                        <td>
+                          <span className={`status-chip ${risk.riskCategory === 'critical' ? 'failed' : risk.riskCategory === 'high' ? 'warning' : 'completed'}`}>
+                            {risk.riskCategory}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                            {risk.contributingFactors.slice(0, 2).map((factor, idx) => (
+                              <small key={idx} className="table-subtext">
+                                • {factor.factor}: {factor.description}
+                              </small>
+                            ))}
+                          </div>
+                        </td>
+                        <td>
+                          <small className="table-subtext">
+                            CPU: {risk.cpuTrend} · Mem: {risk.memoryTrend}
+                          </small>
+                        </td>
+                        <td>{risk.incidentFrequency7d}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState title="No risk scores calculated" detail="All service health telemetry is nominal." />
+            )}
+          </section>
+
+          <section className="dash-card panel">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Recent Proactive Recommendations</h2>
+                <p className="panel-subtitle">Non-executable advisory suggestions to mitigate predicted incidents before outage.</p>
+              </div>
+            </div>
+            {recommendations.length > 0 ? (
+              <div className="table-responsive">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Recommendation</th>
+                      <th>Priority</th>
+                      <th>Category</th>
+                      <th>Suggested Action</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recommendations.slice(0, 4).map((rec) => (
+                      <tr key={rec.id}>
+                        <td><strong>{rec.serviceName}</strong></td>
+                        <td>
+                          <span className="table-primary-link">{rec.title}</span>
+                          <small className="table-subtext">{rec.description}</small>
+                        </td>
+                        <td>
+                          <span className={`status-chip ${rec.priority === 'critical' ? 'failed' : rec.priority === 'high' ? 'warning' : 'completed'}`}>
+                            {rec.priority}
+                          </span>
+                        </td>
+                        <td><span className="table-badge">{rec.category}</span></td>
+                        <td><small className="table-subtext">{rec.suggestedAction}</small></td>
+                        <td>
+                          <span className={`status-chip ${rec.status === 'open' ? 'warning' : 'completed'}`}>
+                            {rec.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyState title="No open recommendations" detail="No proactive actions required at this time." />
+            )}
+          </section>
+        </>
+      )}
+
+      {activeTab === 'predictions' && (
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Predictive Metric Forecasts</h2>
+              <p className="panel-subtitle">Forward-looking telemetry horizons (15m, 30m, 60m) warning of impending capacity or error threshold breaches.</p>
+            </div>
+          </div>
+          {predictions.length > 0 ? (
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Metric</th>
+                    <th>Current</th>
+                    <th>Predicted</th>
+                    <th>Threshold</th>
+                    <th>Horizon</th>
+                    <th>Risk / Probability</th>
+                    <th>Recommended Preventive Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {predictions.map((p) => (
+                    <tr key={p.id}>
+                      <td><strong>{p.serviceName}</strong></td>
+                      <td><code>{p.metricName}</code></td>
+                      <td>{p.currentValue}</td>
+                      <td>
+                        <strong style={{ color: p.predictedValue >= p.thresholdValue ? '#F87171' : '#34D399' }}>
+                          {p.predictedValue}
+                        </strong>
+                      </td>
+                      <td>{p.thresholdValue}</td>
+                      <td>{p.predictionHorizonMinutes} min</td>
+                      <td>
+                        <span className={`status-chip ${p.riskLevel === 'critical' ? 'failed' : p.riskLevel === 'high' ? 'warning' : 'completed'}`}>
+                          {p.riskLevel} ({Math.round(p.anomalyProbability * 100)}%)
+                        </span>
+                      </td>
+                      <td><small className="table-subtext">{p.recommendedPreventiveAction || 'Passive monitoring'}</small></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState title="No threshold breaches predicted" detail="Telemetry projections show stable operational values across all horizons." />
+          )}
+        </section>
+      )}
+
+      {activeTab === 'risk' && (
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Composite Service Health Risk Scores</h2>
+              <p className="panel-subtitle">Transparent risk models accounting for error rate, P95 latency, trends, SLA degradation, and failed recovery history.</p>
+            </div>
+          </div>
+          {riskScores.length > 0 ? (
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Risk Score</th>
+                    <th>Category</th>
+                    <th>Itemized Factor Breakdown</th>
+                    <th>Telemetry Trends</th>
+                    <th>Recent Deployments</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {riskScores.map((risk) => (
+                    <tr key={risk.id}>
+                      <td>
+                        <strong>{risk.serviceName}</strong>
+                        <small className="table-subtext">{risk.serviceId}</small>
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: '16px', color: risk.riskScore >= 75 ? '#F87171' : risk.riskScore >= 50 ? '#FBBF24' : '#34D399' }}>
+                          {risk.riskScore}
+                        </strong>
+                      </td>
+                      <td>
+                        <span className={`status-chip ${risk.riskCategory === 'critical' ? 'failed' : risk.riskCategory === 'high' ? 'warning' : 'completed'}`}>
+                          {risk.riskCategory}
+                        </span>
+                      </td>
+                      <td>
+                        <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '11px', color: '#94A3B8' }}>
+                          {risk.contributingFactors.map((f, i) => (
+                            <li key={i}>
+                              <strong>{f.factor} (+{f.weight} pts):</strong> {f.description}
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                      <td>
+                        <small className="table-subtext">
+                          CPU: {risk.cpuTrend}<br />
+                          Memory: {risk.memoryTrend}
+                        </small>
+                      </td>
+                      <td>
+                        <span className={`table-badge ${risk.recentDeploymentFlag ? 'active' : ''}`}>
+                          {risk.recentDeploymentFlag ? 'Deployed < 2h' : 'Stable'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState title="No risk records available" detail="Telemetry is within nominal bounds." />
+          )}
+        </section>
+      )}
+
+      {activeTab === 'correlations' && (
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Cross-Incident Root Cause Correlation Groups</h2>
+              <p className="panel-subtitle">Correlates concurrent failures linked by shared services, deployments, or upstream dependencies without auto-merging incidents.</p>
+            </div>
+          </div>
+          {correlations.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '12px' }}>
+              {correlations.map((grp) => (
+                <div key={grp.groupId} className="dash-card" style={{ padding: '16px', border: '1px solid rgba(124, 108, 255, 0.25)', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Network size={16} color="#7C6CFF" />
+                      <strong>Group {grp.groupId}</strong>
+                      <span className="table-badge">{grp.correlationType}</span>
+                    </div>
+                    <span className="status-chip completed">
+                      Confidence: {Math.round(grp.correlationScore * 100)}%
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '12px', color: '#CBD5E1', marginBottom: '10px' }}>{grp.explanation}</p>
+                  <div style={{ marginBottom: '8px' }}>
+                    <small style={{ color: '#94A3B8', fontWeight: 600 }}>Shared Telemetry Evidence:</small>
+                    <ul style={{ margin: '4px 0 0 0', paddingLeft: '16px', fontSize: '11px', color: '#94A3B8' }}>
+                      {grp.sharedEvidence.map((ev, i) => (
+                        <li key={i}>{ev}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <small style={{ color: '#94A3B8', fontWeight: 600 }}>Correlated Incidents ({grp.incidents.length}):</small>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                      {grp.incidents.map((inc) => (
+                        <div key={inc.incidentId} style={{ background: '#0D1220', padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <span style={{ color: '#35D6C5', fontWeight: 600, fontSize: '11px' }}>{inc.incidentId}</span>
+                          <span style={{ color: '#94A3B8', fontSize: '11px', marginLeft: '6px' }}>({inc.serviceName}: {inc.title})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No cross-incident correlations" detail="Incidents are isolated; no cascading failure patterns detected." />
+          )}
+        </section>
+      )}
+
+      {activeTab === 'recommendations' && (
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Proactive Preventive Guidance</h2>
+              <p className="panel-subtitle">Actionable suggestions to avert failures before thresholds are breached. Operator review is required.</p>
+            </div>
+          </div>
+          {recommendations.length > 0 ? (
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Issue &amp; Description</th>
+                    <th>Priority</th>
+                    <th>Category</th>
+                    <th>Expected Benefit</th>
+                    <th>Suggested Action</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recommendations.map((rec) => (
+                    <tr key={rec.id}>
+                      <td><strong>{rec.serviceName}</strong></td>
+                      <td>
+                        <span className="table-primary-link">{rec.title}</span>
+                        <small className="table-subtext">{rec.description}</small>
+                      </td>
+                      <td>
+                        <span className={`status-chip ${rec.priority === 'critical' ? 'failed' : rec.priority === 'high' ? 'warning' : 'completed'}`}>
+                          {rec.priority}
+                        </span>
+                      </td>
+                      <td><span className="table-badge">{rec.category}</span></td>
+                      <td><small className="table-subtext">{rec.expectedBenefit}</small></td>
+                      <td><small className="table-subtext">{rec.suggestedAction}</small></td>
+                      <td>
+                        <span className={`status-chip ${rec.status === 'open' ? 'warning' : 'completed'}`}>
+                          {rec.status}
+                        </span>
+                      </td>
+                      <td>
+                        {rec.status === 'open' && onStatusUpdate && (
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            <button
+                              className="dash-button"
+                              style={{ fontSize: '10px', padding: '3px 7px' }}
+                              onClick={() => onStatusUpdate(rec.id, 'acknowledged')}
+                            >
+                              Acknowledge
+                            </button>
+                            <button
+                              className="dash-button primary"
+                              style={{ fontSize: '10px', padding: '3px 7px' }}
+                              onClick={() => onStatusUpdate(rec.id, 'applied')}
+                            >
+                              Mark Applied
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState title="No preventive recommendations" detail="All service parameters and capacity trajectories are healthy." />
+          )}
+        </section>
+      )}
+
+      {activeTab === 'evaluations' && (
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 className="panel-title">Model Evaluation Benchmarks</h2>
+                <span className="demo-label" style={{ background: 'rgba(124, 108, 255, 0.15)', color: '#7C6CFF', border: '1px solid rgba(124, 108, 255, 0.3)' }}>
+                  Synthetic Benchmark Corpora
+                </span>
+              </div>
+              <p className="panel-subtitle">Transparent verification metrics. Evaluated against labeled corpora; synthetic datasets are clearly labeled per governance policy.</p>
+            </div>
+          </div>
+          {evaluations.length > 0 ? (
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Model Name</th>
+                    <th>Type</th>
+                    <th>Dataset</th>
+                    <th>Sample Count</th>
+                    <th>Precision</th>
+                    <th>Recall</th>
+                    <th>F1 Score</th>
+                    <th>FPR</th>
+                    <th>MAE</th>
+                    <th>Latency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {evaluations.map((ev, i) => (
+                    <tr key={i}>
+                      <td><strong>{ev.modelName}</strong></td>
+                      <td><span className="table-badge">{ev.evaluationType}</span></td>
+                      <td>
+                        <small className="table-subtext">
+                          {ev.datasetName} {ev.isSynthetic && <span style={{ color: '#FBBF24' }}>(Synthetic)</span>}
+                        </small>
+                      </td>
+                      <td>{ev.sampleCount}</td>
+                      <td><strong>{(ev.precision * 100).toFixed(1)}%</strong></td>
+                      <td><strong>{(ev.recall * 100).toFixed(1)}%</strong></td>
+                      <td>
+                        <span className="status-chip completed">
+                          {(ev.f1Score * 100).toFixed(1)}%
+                        </span>
+                      </td>
+                      <td>{(ev.falsePositiveRate * 100).toFixed(1)}%</td>
+                      <td>{ev.meanAbsoluteError !== undefined && ev.meanAbsoluteError !== null ? ev.meanAbsoluteError.toFixed(2) : '—'}</td>
+                      <td>{ev.meanLatencyMs.toFixed(3)} ms</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState title="No model evaluation records" detail="Run scripts/evaluate_models.py to execute the model quality benchmark." />
+          )}
+        </section>
+      )}
     </>
   )
 }

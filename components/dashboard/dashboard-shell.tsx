@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Activity, AlertTriangle, BarChart3, Bell, ChevronDown, Clock3, Command, FileText, Gauge, LayoutDashboard, LogOut, Menu, Search, Server, Settings2, Workflow, X } from 'lucide-react'
+import { Activity, AlertTriangle, BarChart3, Bell, Brain, ChevronDown, Clock3, Command, FileText, Gauge, LayoutDashboard, LogOut, Menu, Search, Server, Settings2, Workflow, X } from 'lucide-react'
 import { Brand } from '@/components/marketing/brand'
 import { AuthUser, getAccessToken, getStoredUser, isApiConfigured, isDemoModeExplicit } from '@/lib/api/client'
 import { authApi } from '@/lib/api/resources'
@@ -18,6 +18,7 @@ export function useDashboardControls() {
 
 const navigation = [
   { label: 'Overview', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'AI Intelligence', href: '/dashboard/intelligence', icon: Brain },
   { label: 'Services', href: '/dashboard/services', icon: Activity },
   { label: 'Incidents', href: '/dashboard/incidents', icon: AlertTriangle },
   { label: 'Recovery Center', href: '/dashboard/recovery', icon: Workflow },

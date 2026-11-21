@@ -4,6 +4,7 @@ Integrates Google Gemini API with strict prompt sanitization,
 JSON schema validation, and recovery action allowlist enforcement.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -39,7 +40,8 @@ def sanitize_input(value: Any) -> str:
 class GeminiProvider(AIProvider):
     """
     Google Gemini adapter connecting to generativelanguage.googleapis.com.
-    Enforces structured JSON response schemas and recovery allowlist validation.
+    Enforces structured JSON response schemas, bounded timeouts, retries with backoff,
+    and recovery allowlist validation with transparent heuristic fallback.
     """
 
     def __init__(
@@ -50,7 +52,7 @@ class GeminiProvider(AIProvider):
     ):
         self.api_key = api_key or settings.AI_API_KEY
         self.model = model or settings.AI_MODEL or "gemini-1.5-pro"
-        self.timeout = timeout_seconds or settings.AI_TIMEOUT_SECONDS
+        self.timeout = min(timeout_seconds or settings.AI_TIMEOUT_SECONDS or 15.0, 30.0)
         self._fallback = HeuristicDiagnosisProvider()
 
     @property
@@ -59,7 +61,7 @@ class GeminiProvider(AIProvider):
 
     async def diagnose(self, incident_context: Dict[str, Any]) -> AIDiagnosisResult:
         """
-        Executes Gemini diagnosis. If unconfigured or encounters an error,
+        Executes Gemini diagnosis with retry on transient failures. If unconfigured or encounters an error,
         transparently falls back to deterministic heuristic diagnosis.
         """
         if not self.api_key:
@@ -114,36 +116,65 @@ class GeminiProvider(AIProvider):
             },
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                res = await client.post(url, json=request_body)
+        max_attempts = 2
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with httpx.AsyncClient(timeout=self.timeout) as client:
+                    res = await client.post(url, json=request_body)
 
-                if res.status_code != 200:
-                    logger.warning("Gemini API returned status %s: %s. Using heuristic fallback.", res.status_code, res.text[:200])
-                    return await self._fallback.diagnose(incident_context)
+                    if res.status_code == 429 or res.status_code >= 500:
+                        if attempt < max_attempts:
+                            backoff = 1.0 * attempt
+                            logger.warning(
+                                "Gemini API status %s on attempt %s; retrying after %.1fs backoff",
+                                res.status_code,
+                                attempt,
+                                backoff,
+                            )
+                            await asyncio.sleep(backoff)
+                            continue
+                        logger.warning(
+                            "Gemini API returned status %s: %s. Using heuristic fallback.",
+                            res.status_code,
+                            res.text[:200],
+                        )
+                        return await self._fallback.diagnose(incident_context)
 
-                data = res.json()
-                raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
-                parsed_json = json.loads(raw_text)
+                    if res.status_code != 200:
+                        logger.warning(
+                            "Gemini API returned status %s: %s. Using heuristic fallback.",
+                            res.status_code,
+                            res.text[:200],
+                        )
+                        return await self._fallback.diagnose(incident_context)
 
-                # Validate using Pydantic
-                result = AIDiagnosisResult.model_validate(parsed_json)
+                    data = res.json()
+                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed_json = json.loads(raw_text)
 
-                # Assign provider source and affected service
-                result.provider_source = "gemini"
-                if not result.affected_service:
-                    result.affected_service = clean_context.get("service_name")
+                    # Validate using Pydantic
+                    result = AIDiagnosisResult.model_validate(parsed_json)
 
-                # Security check: verify recommended_action is in approved allowlist
-                if result.recommended_action not in APPROVED_RECOVERY_ACTIONS:
-                    logger.warning(
-                        "AI recommended unapproved action '%s'; substituting safe allowlist default.",
-                        result.recommended_action,
-                    )
-                    result.recommended_action = "restart_service"
+                    # Assign provider source and affected service
+                    result.provider_source = "gemini"
+                    if not result.affected_service:
+                        result.affected_service = clean_context.get("service_name")
 
-                return result
+                    # Security check: verify recommended_action is in approved allowlist
+                    if result.recommended_action not in APPROVED_RECOVERY_ACTIONS:
+                        logger.warning(
+                            "AI recommended unapproved action '%s'; substituting safe allowlist default.",
+                            result.recommended_action,
+                        )
+                        result.recommended_action = "restart_service"
 
-        except Exception as e:
-            logger.warning("Gemini diagnosis failed with error: %s. Invoking heuristic fallback.", e)
-            return await self._fallback.diagnose(incident_context)
+                    return result
+
+            except Exception as e:
+                if attempt < max_attempts:
+                    await asyncio.sleep(1.0)
+                    continue
+                logger.warning("Gemini diagnosis failed with error: %s. Invoking heuristic fallback.", e)
+                return await self._fallback.diagnose(incident_context)
+
+        return await self._fallback.diagnose(incident_context)
