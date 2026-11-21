@@ -18,9 +18,11 @@ from app.schemas.incident import (
     IncidentEvidenceResponse,
     IncidentEventResponse,
     IncidentResponse,
+    IncidentTransitionRequest,
 )
 from app.schemas.recovery import RecoveryActionResponse
 from app.services.events import event_broadcaster
+from app.services.incident_state_machine import IncidentStateMachine
 from app.services.pdf_report import generate_incident_pdf
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
@@ -248,6 +250,57 @@ async def request_recovery(
     })
 
     return recovery_resp
+
+
+@router.post(
+    "/{incident_id}/transition",
+    response_model=IncidentResponse,
+    summary="Transition incident lifecycle state",
+)
+async def transition_incident(
+    incident_id: str,
+    payload: IncidentTransitionRequest,
+    org: OrgDep,
+    current_user: RequireOperatorDep,
+    db: DatabaseDep,
+) -> IncidentResponse:
+    """
+    Safely transitions an incident through its lifecycle state machine.
+    Enforces strict resolution verification:
+    - An incident cannot be marked resolved simply because a recovery command executed.
+    - Successful recovery requires a successful health verification.
+    - Failed verification keeps the incident unresolved.
+    - Failed recovery can be escalated.
+    - Manual sign-off is separately recorded and cannot falsely claim that recovery succeeded.
+    - Every transition has an auditable actor, timestamp, previous state, new state, and reason.
+    """
+    stmt = (
+        select(Incident)
+        .options(selectinload(Incident.evidence), selectinload(Incident.events))
+        .where(
+            Incident.id == incident_id,
+            Incident.organization_id == org.id,
+        )
+    )
+    result = await db.execute(stmt)
+    incident = result.scalar_one_or_none()
+
+    if not incident:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Incident '{incident_id}' was not found in this organization.",
+        )
+
+    updated_incident = await IncidentStateMachine.transition(
+        db=db,
+        incident=incident,
+        target_status=payload.target_status,
+        reason=payload.reason,
+        user=current_user,
+        is_manual_signoff=payload.is_manual_signoff,
+    )
+
+    return format_incident_response(updated_incident)
 
 
 @router.get(

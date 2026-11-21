@@ -13,6 +13,7 @@ import type {
   IncidentCorrelationGroup,
   IncidentEvent,
   IncidentEvidence,
+  IncidentStatus,
   InfrastructureAgent,
   IntelligenceOverview,
   ModelEvaluationMetric,
@@ -140,6 +141,13 @@ export const incidentsApi = {
   },
   async downloadReport(id: string, format: 'pdf' | 'json' = 'pdf', signal?: AbortSignal) {
     return apiBlob(`/api/v1/incidents/${encodeURIComponent(id)}/report?format=${format}`, signal)
+  },
+  async transition(id: string, payload: { target_status: IncidentStatus; reason: string; is_manual_signoff?: boolean }) {
+    return validateIncident(await apiRequest<unknown>(`/api/v1/incidents/${encodeURIComponent(id)}/transition`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }))
   },
 }
 

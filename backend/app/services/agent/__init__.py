@@ -4,10 +4,12 @@ Package initialization.
 """
 
 from app.services.agent.models import (
+    ActionExecutionStatus,
     ActionRequest,
     ActionResult,
     AgentHeartbeat,
     AgentRegistration,
+    AgentStatus,
 )
 from app.services.agent.allowlist import (
     ALLOWED_AGENT_ACTIONS,

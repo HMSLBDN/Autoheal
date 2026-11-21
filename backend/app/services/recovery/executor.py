@@ -17,6 +17,7 @@ from app.models.incident import Incident, IncidentEvent
 from app.models.recovery import RecoveryAction, RecoveryResult
 from app.models.service import RecoveryPolicy, Service
 from app.services.agent import (
+    ActionExecutionStatus,
     ActionRequest,
     InfrastructureAgentClient,
     SimulatedAgentClient,
@@ -124,6 +125,81 @@ class RecoveryExecutor:
             timestamp=start_time,
         )
         agent_res = await self.agent_client.dispatch_action(action_req)
+
+        # 6a. Check if restricted agent execution failed or was rejected
+        if agent_res.status != ActionExecutionStatus.SUCCESS or agent_res.exit_code != 0:
+            now = datetime.now(timezone.utc)
+            fail_summary = (
+                f"Execution failed for action '{action_def.display_name if action_def else recovery.action}' "
+                f"on service '{recovery.service_name}'. Agent returned status '{agent_res.status.value}' "
+                f"with exit code {agent_res.exit_code}: {agent_res.stderr_summary or 'Execution rejected or failed'}"
+            )
+            recovery.status = "failed"
+            recovery.verification = "failed"
+            diag_output = (
+                f"[AGENT_EXECUTION_FAILURE]\n"
+                f"TIMESTAMP: {now.isoformat()}\n"
+                f"ACTION: {recovery.action}\n"
+                f"SERVICE: {recovery.service_name}\n"
+                f"AGENT_ID: {agent_res.agent_id}\n"
+                f"STATUS: {agent_res.status.value}\n"
+                f"EXIT_CODE: {agent_res.exit_code}\n"
+                f"EVIDENCE_HASH: {agent_res.evidence_receipt_hash}\n"
+                f"STDERR:\n{agent_res.stderr_summary}\n"
+            )
+            if "result" in recovery.__dict__ and recovery.result is not None:
+                recovery.result.summary = fail_summary
+                recovery.result.verified = False
+                recovery.result.completed_at = now
+                recovery.result.diagnostic_output = diag_output
+            else:
+                recovery.result = RecoveryResult(
+                    id=uuid.uuid4(),
+                    recovery_action_id=recovery.id,
+                    verified=False,
+                    summary=fail_summary,
+                    completed_at=now,
+                    diagnostic_output=diag_output,
+                )
+
+            # Update incident state to reflect failure and prevent resolution
+            inc_stmt = select(Incident).where(Incident.id == recovery.incident_id)
+            inc_res = await db.execute(inc_stmt)
+            incident = inc_res.scalar_one_or_none()
+            if incident:
+                incident.status = "investigating"
+                incident.recovery_status = f"Execution failed ({agent_res.status.value}) / Escalation required"
+                db.add(IncidentEvent(
+                    incident_id=incident.id,
+                    label="Recovery Execution Failed",
+                    detail=fail_summary,
+                    timestamp=now,
+                    tone="warning",
+                ))
+
+            db.add(AuditLog(
+                organization_id=service.organization_id if service else None,
+                action="recovery_failed",
+                resource_type="recovery_action",
+                resource_id=recovery.id,
+                details=f"Execution of '{recovery.action}' failed for '{recovery.service_name}'. Status: {agent_res.status.value}, exit_code: {agent_res.exit_code}.",
+            ))
+            await db.commit()
+
+            # Broadcast failure events
+            if incident:
+                await event_broadcaster.broadcast(incident.organization_id, "recovery_updated", {
+                    "id": recovery.id,
+                    "status": recovery.status,
+                    "verification": recovery.verification,
+                    "durationSeconds": recovery.duration_seconds,
+                })
+                await event_broadcaster.broadcast(incident.organization_id, "incident_updated", {
+                    "id": incident.id,
+                    "status": incident.status,
+                    "recoveryStatus": incident.recovery_status,
+                })
+            return recovery
 
         exec_summary = (
             f"Successfully executed {action_def.display_name if action_def else recovery.action} "

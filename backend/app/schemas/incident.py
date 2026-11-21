@@ -7,9 +7,16 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 SeverityType = Literal["critical", "high", "medium", "low"]
-IncidentStatusType = Literal["open", "investigating", "recovering", "resolved"]
+IncidentStatusType = Literal["open", "investigating", "recovering", "escalated", "resolved"]
 EvidenceKindType = Literal["metric", "log", "deployment", "health_check"]
 EventToneType = Literal["neutral", "warning", "success"]
+
+
+class IncidentTransitionRequest(BaseModel):
+    """Payload for transitioning an incident through its lifecycle state machine."""
+    target_status: IncidentStatusType = Field(..., description="Target lifecycle state")
+    reason: str = Field(..., min_length=3, description="Auditable justification for transition")
+    is_manual_signoff: bool = Field(False, description="Explicit acknowledgment of manual human sign-off")
 
 
 class IncidentEvidenceResponse(BaseModel):
