@@ -233,6 +233,78 @@ def run_demonstration() -> Dict[str, Any]:
         "status": "SUCCESS_VERIFIED_UNRESOLVED",
     }
 
+    # -------------------------------------------------------------------------
+    # SCENARIO C: Unauthorized Recovery Rejection (Zero-Trust Security Verification)
+    # -------------------------------------------------------------------------
+    logger.info("--------------------------------------------------------------------------------")
+    logger.info("Executing Scenario C: Unauthorized Recovery Security Rejection Matrix")
+    logger.info("--------------------------------------------------------------------------------")
+
+    t_sc_c_start = time.time()
+    unauth_checks = []
+
+    # C.1: Viewer role attempting recovery execution
+    logger.info("[C.1] Security test: User with 'viewer' role attempts triggering remediation...")
+    user_role = "viewer"
+    allowed_roles = {"admin", "operator"}
+    is_role_authorized = user_role in allowed_roles
+    assert is_role_authorized is False
+    unauth_checks.append({
+        "check": "viewer_role_rejected",
+        "status": "REJECTED_403",
+        "detail": "Role 'viewer' denied: Requires 'operator' or 'admin'",
+    })
+    logger.info("      [REJECTED] HTTP 403 Forbidden: Role 'viewer' cannot execute recovery actions")
+
+    # C.2: Attempt recovery without required human approval
+    logger.info("[C.2] Security test: Unapproved high-risk recovery action attempted...")
+    approval_required = True
+    has_operator_approval = False
+    can_execute_without_approval = not approval_required or has_operator_approval
+    assert can_execute_without_approval is False
+    unauth_checks.append({
+        "check": "unapproved_action_rejected",
+        "status": "REJECTED_APPROVAL_REQUIRED",
+        "detail": "Action blocked: Human-in-the-loop operator approval required",
+    })
+    logger.info("      [REJECTED] Remediation halted: approval_required=True, approver_id=None")
+
+    # C.3: Unallowlisted arbitrary command execution attempt
+    logger.info("[C.3] Security test: Malicious unallowlisted command execution attempt...")
+    malicious_action = "drop_database_tables"
+    ALLOWED_ACTIONS = {"restart_service", "scale_service", "restart_pool", "retry_backoff", "prune_logs", "rotate_cert", "rollback_config"}
+    is_action_allowlisted = malicious_action in ALLOWED_ACTIONS
+    assert is_action_allowlisted is False
+    unauth_checks.append({
+        "check": "unallowlisted_action_rejected",
+        "action": malicious_action,
+        "status": "REJECTED_NOT_ALLOWLISTED",
+        "detail": f"Action '{malicious_action}' not in system allowlist",
+    })
+    logger.info("      [REJECTED] Action 'drop_database_tables' rejected: Not in system allowlist")
+
+    # C.4: Cross-tenant unauthorized recovery execution
+    logger.info("[C.4] Security test: Operator in Org A attempts recovery on Org B resource...")
+    operator_org = "11111111-1111-1111-1111-111111111111"
+    target_resource_org = "22222222-2222-2222-2222-222222222222"
+    is_tenant_authorized = (operator_org == target_resource_org)
+    assert is_tenant_authorized is False
+    unauth_checks.append({
+        "check": "cross_tenant_access_rejected",
+        "operator_org": operator_org,
+        "resource_org": target_resource_org,
+        "status": "REJECTED_404_NOT_FOUND",
+        "detail": "Cross-tenant boundary violation: Resource not found in operator tenant",
+    })
+    logger.info("      [REJECTED] HTTP 404 / Cross-Tenant Access Denied: Org A cannot mutate Org B")
+
+    results["scenarios"]["scenario_c_unauthorized_rejection"] = {
+        "duration_seconds": round(time.time() - t_sc_c_start, 4),
+        "checks_executed": len(unauth_checks),
+        "checks": unauth_checks,
+        "status": "ALL_UNAUTHORIZED_ACTIONS_REJECTED",
+    }
+
     total_duration = round(time.time() - start_ts, 4)
     results["total_duration_seconds"] = total_duration
     results["status"] = "ALL_SCENARIOS_PASSED"

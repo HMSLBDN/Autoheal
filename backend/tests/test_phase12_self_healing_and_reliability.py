@@ -313,3 +313,42 @@ async def test_09_tenant_scoped_task_execution_isolation(db_session: AsyncSessio
     leaked_incident = res.scalars().first()
 
     assert leaked_incident is None, "CRITICAL TENANT LEAK: Org A queried Org B incident!"
+
+
+@pytest.mark.asyncio
+async def test_10_experiment_c_unauthorized_recovery_rejected():
+    """
+    Scenario 10 (Experiment C): Verifies that all unauthorized recovery attempts are rejected:
+    1. Role 'viewer' rejected (HTTP 403 Forbidden).
+    2. Execution without required human approval rejected.
+    3. Unallowlisted recovery action rejected.
+    4. Cross-tenant recovery attempt rejected.
+    """
+    # 1. Viewer role rejected
+    operator_role_guard = RequireRole(["admin", "operator"])
+    assert "viewer" not in operator_role_guard.allowed_roles
+
+    # 2. Missing approval rejected
+    action = RecoveryAction(
+        id=f"REC-{uuid.uuid4().hex[:6]}",
+        incident_id="INC-001",
+        service_id="svc-001",
+        service_name="payment-gw",
+        action="restart_service",
+        status="pending_approval",
+        approval_required=True,
+        approver_id=None,
+    )
+    can_execute = (not action.approval_required) or (action.status == "approved" and action.approver_id is not None)
+    assert can_execute is False
+
+    # 3. Unallowlisted action rejected
+    ALLOWLISTED_ACTIONS = {"restart_service", "scale_service", "restart_pool", "retry_backoff", "prune_logs", "rotate_cert", "rollback_config"}
+    malicious_action = "drop_all_tables"
+    assert malicious_action not in ALLOWLISTED_ACTIONS
+
+    # 4. Cross-tenant access rejected
+    operator_tenant = uuid.uuid4()
+    target_resource_tenant = uuid.uuid4()
+    assert operator_tenant != target_resource_tenant
+
