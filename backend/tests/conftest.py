@@ -22,6 +22,7 @@ from sqlalchemy.pool import StaticPool
 
 # Ensure backend directory is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+os.environ.setdefault("ALERTMANAGER_HMAC_SECRET", "test-env-alertmanager-hmac-secret-32-chars")
 
 from app.api.deps import get_current_org, get_current_user, get_db
 from app.config import get_settings

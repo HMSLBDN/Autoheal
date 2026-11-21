@@ -278,3 +278,73 @@ async def test_alert_resolved_state_transitions_incident(alert_client: TestClien
     await db_session.refresh(incident)
     assert incident.status == "resolved"
     assert incident.resolved_at is not None
+
+
+@pytest.mark.asyncio
+async def test_duplicate_resolved_alert_does_not_reopen_or_duplicate_incident(alert_client: TestClient, db_session: AsyncSession):
+    """Subsequent duplicate 'resolved' alerts do not reopen or duplicate resolved incidents."""
+    org = Organization(id=uuid.uuid4(), slug="dup-resolved-org", name="Dup Resolved Org", is_active=True)
+    db_session.add(org)
+    await db_session.flush()
+
+    svc = Service(
+        id="svc-dup-resolved",
+        organization_id=org.id,
+        name="checkout-api",
+        environment="production",
+        status="healthy",
+        availability=99.9,
+        error_rate=0.0,
+        latency_ms=25,
+        last_checked=datetime.now(timezone.utc),
+    )
+    db_session.add(svc)
+    await db_session.flush()
+
+    # Pre-existing resolved incident
+    incident = Incident(
+        id="INC-ALREADY-RESOLVED",
+        organization_id=org.id,
+        service_id=svc.id,
+        service_name=svc.name,
+        title="High error rate on checkout-api",
+        severity="high",
+        status="resolved",
+        detected_at=datetime.now(timezone.utc),
+        resolved_at=datetime.now(timezone.utc),
+        recovery_status="Resolved by Alertmanager",
+        error_rate=0.0,
+        threshold=1.0,
+    )
+    db_session.add(incident)
+    await db_session.commit()
+
+    # Send duplicate resolved alert
+    payload = {
+        "status": "resolved",
+        "alerts": [
+            {
+                "status": "resolved",
+                "labels": {"alertname": "HighErrorRate", "service": "checkout-api"},
+            }
+        ],
+    }
+
+    res = alert_client.post(
+        "/api/v1/alerts/webhook",
+        json=payload,
+        headers={"X-Alertmanager-Secret": settings.ALERTMANAGER_HMAC_SECRET},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["incidents_created"] == 0
+    assert data["incidents_updated"] == 0
+    assert "no active incident existed" in data["details"][0]
+
+    # Verify incident remains resolved in DB and no new incident was created
+    await db_session.refresh(incident)
+    assert incident.status == "resolved"
+
+    all_incs = (await db_session.execute(select(Incident).where(Incident.service_id == svc.id))).scalars().all()
+    assert len(all_incs) == 1
+

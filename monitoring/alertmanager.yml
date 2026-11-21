@@ -18,5 +18,5 @@ receivers:
       - url: "http://autoheal-api:8000/api/v1/alerts/webhook"
         send_resolved: true
         http_config:
-          bearer_token: "autoheal_alertmanager_webhook_hmac_secret_key_12345"
+          bearer_token: "autoheal_dev_alertmanager_webhook_secret_32chars"
         max_alerts: 10

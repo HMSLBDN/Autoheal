@@ -138,7 +138,7 @@ export const alertsApi = {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Alertmanager-Secret': secret || 'autoheal_alertmanager_webhook_hmac_secret_key_12345',
+          'X-Alertmanager-Secret': secret || process.env.NEXT_PUBLIC_ALERTMANAGER_SECRET || '',
         },
         body: JSON.stringify(payload),
       }

@@ -193,7 +193,11 @@ class Settings(BaseSettings):
 
     # Monitoring & Alerting
     PROMETHEUS_URL: str = "http://localhost:9090"
-    ALERTMANAGER_HMAC_SECRET: str = "autoheal_alertmanager_webhook_hmac_secret_key_12345"
+    ALERTMANAGER_HMAC_SECRET: str = Field(
+        default="autoheal_dev_alertmanager_webhook_secret_32chars",
+        validation_alias=AliasChoices("ALERTMANAGER_HMAC_SECRET", "ALERTMANAGER_WEBHOOK_SECRET"),
+        description="Shared HMAC/Bearer secret between Alertmanager and FastAPI alert webhook"
+    )
     METRIC_SCRAPE_INTERVAL_SECONDS: int = 15
 
     # Recovery Automation Engine
@@ -229,6 +233,17 @@ class Settings(BaseSettings):
             if self.DB_SSL_MODE == "disable":
                 raise ValueError(
                     "Disabling database SSL ('disable') is strictly prohibited in production or staging."
+                )
+            insecure_hmac_defaults = {
+                "autoheal_alertmanager_webhook_hmac_secret_key_12345",
+                "autoheal_dev_alertmanager_webhook_secret_32chars",
+                "",
+            }
+            if not self.ALERTMANAGER_HMAC_SECRET or self.ALERTMANAGER_HMAC_SECRET in insecure_hmac_defaults:
+                raise ValueError(
+                    "ALERTMANAGER_HMAC_SECRET is missing or using an insecure default value. "
+                    "In production and staging environments, a dedicated secret must be provided via the "
+                    "ALERTMANAGER_HMAC_SECRET environment variable."
                 )
             if self.APP_ENV == "production" and "DEMO_MODE_ENABLED" not in self.model_fields_set:
                 self.DEMO_MODE_ENABLED = False

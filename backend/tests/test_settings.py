@@ -122,3 +122,47 @@ async def test_admin_can_update_organization_name(
     assert response.status_code == 200
     data = response.json()
     assert data["organization"]["name"] == "Renamed Enterprise Workspace"
+
+
+def test_settings_fails_safe_on_missing_or_insecure_hmac_secret_in_production():
+    """In production, settings validation raises ValueError if ALERTMANAGER_HMAC_SECRET is default or empty."""
+    from app.config import Settings
+
+    with pytest.raises(ValueError, match="ALERTMANAGER_HMAC_SECRET is missing or using an insecure default value"):
+        Settings(
+            APP_ENV="production",
+            ALERTMANAGER_HMAC_SECRET="autoheal_alertmanager_webhook_hmac_secret_key_12345",
+            SECRET_KEY="test_production_secret_key_min_32_characters_12345",
+            REDIS_SSL_CERT_REQS="required",
+            REDIS_SSL_CHECK_HOSTNAME=True,
+            FORWARDED_ALLOW_IPS="10.0.0.1",
+            DB_SSL_MODE="require",
+        )
+
+    with pytest.raises(ValueError, match="ALERTMANAGER_HMAC_SECRET is missing or using an insecure default value"):
+        Settings(
+            APP_ENV="production",
+            ALERTMANAGER_HMAC_SECRET="autoheal_dev_alertmanager_webhook_secret_32chars",
+            SECRET_KEY="test_production_secret_key_min_32_characters_12345",
+            REDIS_SSL_CERT_REQS="required",
+            REDIS_SSL_CHECK_HOSTNAME=True,
+            FORWARDED_ALLOW_IPS="10.0.0.1",
+            DB_SSL_MODE="require",
+        )
+
+
+def test_settings_succeeds_with_strong_hmac_secret_in_production():
+    """In production, settings validation passes when strong dedicated secret is provided."""
+    from app.config import Settings
+
+    prod_settings = Settings(
+        APP_ENV="production",
+        ALERTMANAGER_HMAC_SECRET="strong_production_dedicated_webhook_secret_998877",
+        SECRET_KEY="test_production_secret_key_min_32_characters_12345",
+        REDIS_SSL_CERT_REQS="required",
+        REDIS_SSL_CHECK_HOSTNAME=True,
+        FORWARDED_ALLOW_IPS="10.0.0.1",
+        DB_SSL_MODE="require",
+    )
+    assert prod_settings.ALERTMANAGER_HMAC_SECRET == "strong_production_dedicated_webhook_secret_998877"
+

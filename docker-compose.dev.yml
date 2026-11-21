@@ -24,7 +24,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://autoheal_user:autoheal_dev_pass@db:5432/autoheal_db
       - REDIS_URL=redis://:redis_dev_pass@redis:6379/0
       - SECRET_KEY=autoheal_development_secret_key_min_32_characters_long_12345
-      - ALERTMANAGER_HMAC_SECRET=autoheal_alertmanager_webhook_hmac_secret_key_12345
+      - ALERTMANAGER_HMAC_SECRET=${ALERTMANAGER_HMAC_SECRET:-autoheal_dev_alertmanager_webhook_secret_32chars}
       - ALERTMANAGER_WEBHOOK_SECRET=autoheal_development_alertmanager_secret_key_32chars
       - PROMETHEUS_URL=http://prometheus:9090
       - ALERTMANAGER_URL=http://alertmanager:9093

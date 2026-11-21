@@ -275,29 +275,57 @@ alembic -c backend/alembic.ini upgrade head
 
 ### 10.4 Running Tests
 ```powershell
-# Run full pytest suite (74 tests)
-.venv\Scripts\python.exe -m pytest backend/tests -v
+# Run full backend pytest suite (136 tests)
+.\.venv\Scripts\python -m pytest backend/tests -v
 
 # Run frontend TypeScript typecheck
-npx pnpm exec tsc --noEmit
+npx tsc --noEmit
 
 # Run Next.js production build
-npx pnpm run build
+pnpm run build
 ```
 
 ---
 
 ## 11. Test Coverage & Verification Summary
 
-All 74 backend tests pass with zero failures:
+All 136 backend tests pass with zero failures:
 - `test_agent_architecture.py`: Envelope signing, nonce replay rejection, timestamp drift, allowlist enforcement, simulated execution.
-- `test_sse_ticket_security.py`: Single-use ticket issuance, atomic consumption, replay rejection, expired ticket rejection.
-- `test_readiness.py`: Public health, liveness, and deep database/redis readiness probes.
-- `test_backup_restore.py`: Backup generation, SHA-256 verification, retention pruning, restore safety guards.
-- `test_docker_compose.py`: Compose service topology, security checks (no public db/redis ports in prod, zero Docker socket mounts, non-root users).
+- `test_ai_diagnosis.py`: AI root cause analysis, prompt injection defense, heuristic fallback, allowlist enforcement.
+- `test_alerts.py`: Webhook HMAC-SHA256 signature verification, incident deduplication, duplicate resolved alert protection.
+- `test_analytics.py`: Mathematical accuracy of FPR ($FP / (FP + TN)$) and operator rejection separation.
 - `test_auth.py` & `test_auth_security.py`: Argon2id, JWT validation, RTR rotation, replay detection, master-key bypass prevention.
-- `test_ai_diagnosis.py`: AI root cause analysis, prompt injection defense, heuristic fallback.
-- `test_alerts.py`: Webhook HMAC-SHA256 signature verification, incident deduplication.
-- `test_recovery_engine.py`: Policy cooldown, approval gating, simulated recovery execution, post-recovery health verification.
-- `test_e2e_workflow.py`: Complete 17-step end-to-end integration workflow.
-- `test_sse.py`: Server-Sent Events broadcasting and multi-tenant isolation.
+- `test_backup_restore.py`: Backup generation, SHA-256 verification, retention pruning, 3-guard restore safety guards.
+- `test_database_ssl_security.py`: SSL mode normalization, CA bundle validation, verify-ca/verify-full hostname verification.
+- `test_docker_compose.py`: Compose service topology, security checks (no public db/redis ports in prod, zero Docker socket mounts, non-root users).
+- `test_e2e_demo_lifecycle.py` & `test_e2e_workflow.py`: Complete 14-stage and 17-step end-to-end integration workflows.
+- `test_events.py`: Incident events audit log, state transitions, tenant filtering.
+- `test_incidents.py`: Incident creation, status transitions, resolution verification.
+- `test_readiness.py`: Public health, liveness, and deep database/redis readiness probes.
+- `test_recoveries.py` & `test_recovery_engine.py`: Policy cooldown, RBAC approval gating, simulated recovery execution, post-recovery health verification.
+- `test_redis_tls_security.py`: Rediss:// TLS validation, certificate verification enforcement in production, CA file validation.
+- `test_reports.py`: PDF post-mortem generation and JSON export with organization scoping.
+- `test_reverse_proxy_security.py`: Trusted proxy CIDRs and wildcard proxy rejection in production.
+- `test_services.py`: Service registration, health state tracking, and metrics association.
+- `test_settings.py`: Startup security fail-safes (HMAC secret enforcement, wildcard proxy prevention).
+- `test_sse.py` & `test_sse_ticket_security.py`: Server-Sent Events broadcasting, single-use ticket issuance, atomic burn on handshake.
+
+---
+
+## 12. Documentation & Operational Reference Index
+
+Comprehensive guides covering architecture, deployment, security, and operation:
+
+1. [ARCHITECTURE.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/ARCHITECTURE.md) — System architecture, data flow diagrams, component boundaries, and security topology.
+2. [SECURITY.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/SECURITY.md) — Security policies, threat model, secret rotation procedures, and RBAC matrix.
+3. [API_DOCUMENTATION.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/API_DOCUMENTATION.md) — Complete REST API reference, request/response schemas, and authentication headers.
+4. [LOCAL_SETUP.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/LOCAL_SETUP.md) — Step-by-step local development setup with virtualenv, Node.js, and PowerShell instructions.
+5. [DOCKER_SETUP.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/DOCKER_SETUP.md) — Multi-stage Docker build, container security, compose dev/prod environments, and healthcheck specs.
+6. [MONITORING_SETUP.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/MONITORING_SETUP.md) — Prometheus scrape targets, alert rules, Alertmanager routing, and HMAC webhook authentication.
+7. [RECOVERY_ENGINE.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/RECOVERY_ENGINE.md) — Action allowlist, simulation architecture, RBAC approval flow, and post-recovery verification.
+8. [DATABASE_BACKUP_RESTORE.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/DATABASE_BACKUP_RESTORE.md) — PostgreSQL backup/restore procedures (`scripts/backup.ps1`, `scripts/restore.ps1`), pooling, and safety guards.
+9. [TROUBLESHOOTING.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/TROUBLESHOOTING.md) — Common diagnostic scenarios (AppLocker, Docker named pipes, Redis TLS, SSE tickets) and verified fixes.
+10. [PHASE_5_ACCEPTANCE_REPORT.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/PHASE_5_ACCEPTANCE_REPORT.md) — Itemized acceptance matrix with verification results and empirical evidence for all Phase 5 requirements.
+11. [PHASE_6_READINESS_REPORT.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/PHASE_6_READINESS_REPORT.md) — 12-domain production readiness assessment and prioritized Phase 6 roadmap.
+12. [DEMO_GUIDE.md](file:///c:/Users/Akshay%20N/Documents/Autoheal/autoheal-devops-saas/DEMO_GUIDE.md) — Guided walkthrough for live demonstration of fault injection, alert handling, AI diagnosis, and recovery.
+
