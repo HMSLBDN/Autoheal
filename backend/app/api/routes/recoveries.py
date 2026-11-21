@@ -282,6 +282,13 @@ async def execute_recovery_endpoint(
             detail=f"Recovery action '{recovery_id}' was not found in this organization.",
         )
 
+    # Missing approval check: actions requiring approval must be approved prior to manual execution
+    if recovery.approval_required and recovery.status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Recovery '{recovery_id}' requires explicit operator approval before execution (current status: '{recovery.status}').",
+        )
+
     try:
         executor = RecoveryExecutor()
         executed_recovery = await executor.execute_recovery(db, recovery_id=recovery.id)

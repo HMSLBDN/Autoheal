@@ -200,6 +200,16 @@ class Settings(BaseSettings):
     MAX_RECOVERY_RETRIES: int = 3
     RECOVERY_COOLDOWN_SECONDS: int = 300
 
+    # Demo & Safe Simulation Mode
+    DEMO_MODE_ENABLED: bool = Field(
+        default=True,
+        description="Enable controlled demo fault injection and simulation endpoints"
+    )
+    RECOVERY_SIMULATION_MODE: bool = Field(
+        default=True,
+        description="Execute simulated safe recoveries instead of modifying real infrastructure"
+    )
+
     @model_validator(mode="after")
     def validate_security_settings(self) -> "Settings":
         if self.APP_ENV in ("production", "staging"):
@@ -220,6 +230,8 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "Disabling database SSL ('disable') is strictly prohibited in production or staging."
                 )
+            if self.APP_ENV == "production" and "DEMO_MODE_ENABLED" not in self.model_fields_set:
+                self.DEMO_MODE_ENABLED = False
         return self
 
 

@@ -9,6 +9,7 @@ from fastapi import APIRouter
 from sqlalchemy import func, select
 
 from app.api.deps import DatabaseDep, OrgDep
+from app.models.audit import AuditLog
 from app.models.incident import Incident
 from app.models.recovery import RecoveryAction
 from app.models.service import Service
@@ -55,13 +56,54 @@ async def get_analytics_summary(
     recoveries = rec_res.all()
 
     completed_count = sum(1 for r in recoveries if r.status == "completed")
+    rejected_count = sum(1 for r in recoveries if r.status == "rejected")
+    failed_count = sum(1 for r in recoveries if r.status == "failed")
     total_terminal = sum(1 for r in recoveries if r.status in ["completed", "failed", "rejected"])
     success_rate = round((completed_count / total_terminal * 100), 1) if total_terminal > 0 else 94.2
+
+    # Actual false positive rate: rejected actions or false alerts
+    false_positive_rate = round((rejected_count / total_terminal * 100), 1) if total_terminal > 0 else 2.1
 
     durations = [r.duration_seconds for r in recoveries if r.duration_seconds is not None]
     avg_duration_min = round((sum(durations) / len(durations) / 60), 1) if durations else 6.4
 
-    # 4. 7-Day History Series
+    # 4. Actual detection latency calculated from audit logs or incident records
+    detection_latency = 42.0
+    fault_logs_stmt = (
+        select(AuditLog.created_at)
+        .where(
+            AuditLog.organization_id == org.id,
+            AuditLog.action.in_(["demo_fault_triggered", "fault_injected"]),
+        )
+        .order_by(AuditLog.created_at.desc())
+        .limit(10)
+    )
+    fault_logs_res = await db.execute(fault_logs_stmt)
+    fault_times = fault_logs_res.scalars().all()
+
+    if fault_times:
+        inc_times_stmt = (
+            select(Incident.detected_at)
+            .where(Incident.organization_id == org.id)
+            .order_by(Incident.detected_at.desc())
+            .limit(10)
+        )
+        inc_times_res = await db.execute(inc_times_stmt)
+        inc_times = inc_times_res.scalars().all()
+
+        latencies = []
+        for it in inc_times:
+            # Match with closest preceding fault time
+            preceding = [ft for ft in fault_times if ft <= it]
+            if preceding:
+                delta = (it - preceding[0]).total_seconds()
+                if 0.0 <= delta <= 300.0:
+                    latencies.append(delta)
+
+        if latencies:
+            detection_latency = round(sum(latencies) / len(latencies), 1)
+
+    # 5. 7-Day History Series
     history = [
         AnalyticsHistoryPoint(date="Mon", incidents=8, recoveries=6, availability=99.82),
         AnalyticsHistoryPoint(date="Tue", incidents=5, recoveries=4, availability=99.91),
@@ -73,10 +115,10 @@ async def get_analytics_summary(
     ]
 
     return AnalyticsSummaryResponse(
-        detection_latency_seconds=42.0,
+        detection_latency_seconds=detection_latency,
         recovery_duration_minutes=avg_duration_min,
         recovery_success_rate=success_rate,
-        false_positive_rate=2.1,
+        false_positive_rate=false_positive_rate,
         availability=availability_val,
         incident_count=inc_count,
         history=history,
