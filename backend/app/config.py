@@ -97,9 +97,18 @@ class Settings(BaseSettings):
         if not value:
             return value
         if value.startswith("postgres://"):
-            return value.replace("postgres://", "postgresql+asyncpg://", 1)
+            value = value.replace("postgres://", "postgresql+asyncpg://", 1)
         elif value.startswith("postgresql://") and not value.startswith("postgresql+"):
-            return value.replace("postgresql://", "postgresql+asyncpg://", 1)
+            value = value.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # Normalize cloud PostgreSQL SSL query parameter for asyncpg dialect
+        if "sslmode=" in value:
+            value = (
+                value.replace("sslmode=require", "ssl=require")
+                .replace("sslmode=prefer", "ssl=prefer")
+                .replace("sslmode=disable", "ssl=disable")
+                .replace("sslmode=verify-full", "ssl=verify-full")
+                .replace("sslmode=verify-ca", "ssl=verify-ca")
+            )
         return value
 
     DB_POOL_SIZE: int = 20

@@ -55,6 +55,14 @@ celery_app.conf.update(
     task_max_retries=3,
 )
 
+# Support managed cloud Redis with TLS (rediss://)
+if broker_url.startswith("rediss://"):
+    import ssl
+    celery_app.conf.update(
+        broker_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
+        redis_backend_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE},
+    )
+
 
 @signals.task_failure.connect
 def on_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **extra):

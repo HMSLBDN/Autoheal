@@ -2,6 +2,7 @@
 AutoHeal DevOps — FastAPI Application Entry Point
 """
 
+import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Dict
 
@@ -13,6 +14,7 @@ from app.api import api_router
 from app.config import get_settings
 from app.core.logging import RequestTracingMiddleware
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
@@ -21,9 +23,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Application lifecycle management (startup and graceful shutdown).
     """
-    # Startup: Initialize connection pools, verify health of upstream services
+    # Startup: Initialize runtime and log configuration
+    logger.info("Initializing %s (version: %s, env: %s)...", settings.APP_NAME, settings.APP_VERSION, settings.APP_ENV)
     yield
     # Shutdown: Cleanly close background executors, Redis connections, DB pools
+    logger.info("Gracefully terminating %s runtime...", settings.APP_NAME)
+    try:
+        from app.database import engine
+        await engine.dispose()
+        logger.info("Database engine connection pool disposed cleanly.")
+    except Exception as exc:
+        logger.warning("Error disposing database pool during shutdown: %s", exc)
 
 
 app = FastAPI(
