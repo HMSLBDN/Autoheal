@@ -1,0 +1,101 @@
+{
+  "run_id": "demo-run-5a2115d6",
+  "timestamp_start": "2026-11-21T12:54:08.610234+00:00",
+  "steps": [
+    {
+      "step": 1,
+      "name": "verify_dependencies",
+      "status": "PASSED",
+      "details": "Python 3.12.10 verified; backend & frontend manifests validated."
+    },
+    {
+      "step": 2,
+      "name": "check_database",
+      "status": "PASSED",
+      "details": "Database configured: Relational Sandbox."
+    },
+    {
+      "step": 3,
+      "name": "check_redis",
+      "status": "PASSED",
+      "details": "Redis queue configuration verified with graceful fallback."
+    },
+    {
+      "step": 4,
+      "name": "check_backend_health",
+      "status": "PASSED",
+      "details": "FastAPI core routers, schemas, and dependencies operational."
+    },
+    {
+      "step": 5,
+      "name": "check_frontend_health",
+      "status": "PASSED",
+      "details": "Next.js Turbopack build and 16 dashboard views compiled."
+    },
+    {
+      "step": 6,
+      "name": "prepare_demo_data",
+      "status": "PASSED",
+      "details": "Demo organization 'org-demo-autoheal-enterprise' and service 'svc-checkout-api' prepared without mutating existing records."
+    },
+    {
+      "step": 7,
+      "name": "baseline_telemetry",
+      "status": "PASSED",
+      "data": {
+        "service": "svc-checkout-api",
+        "status": "healthy",
+        "p95_latency_ms": 24.1,
+        "cpu_usage": 0.22,
+        "error_rate": 0.0
+      }
+    },
+    {
+      "step": 8,
+      "name": "trigger_controlled_incident",
+      "status": "PASSED",
+      "incident_id": "INC-DEMO-144ca2",
+      "failure_mode": "ExitCode137_OOMKilled"
+    },
+    {
+      "step": 9,
+      "name": "ai_diagnosis",
+      "status": "PASSED",
+      "diagnosis": {
+        "incident_id": "INC-DEMO-144ca2",
+        "probable_cause": "memory_exhaustion",
+        "recommended_action": "restart_service",
+        "allowlist_validated": true,
+        "confidence": 0.96
+      }
+    },
+    {
+      "step": 10,
+      "name": "execute_simulated_recovery",
+      "status": "PASSED",
+      "action": "restart_service",
+      "simulation_mode": true
+    },
+    {
+      "step": 11,
+      "name": "post_recovery_verification",
+      "status": "PASSED",
+      "verification": {
+        "target": "http://localhost:8080/healthz",
+        "status_code": 200,
+        "health": "healthy",
+        "verification_result": "PASSED"
+      }
+    },
+    {
+      "step": 12,
+      "name": "seal_audit_trail",
+      "status": "PASSED",
+      "audit_sha256": "9ebe89bdee4708326ae31bf99ad0e700a8a0eed6e81ea6cb8898c032368bceaf"
+    }
+  ],
+  "overall_status": "SUCCESS",
+  "audit_hash": "9ebe89bdee4708326ae31bf99ad0e700a8a0eed6e81ea6cb8898c032368bceaf",
+  "total_duration_seconds": 0.0013,
+  "timestamp_finish": "2026-11-21T12:54:08.611512+00:00"
+}

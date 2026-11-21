@@ -1,0 +1,88 @@
+{
+  "demonstration_id": "demo-16ebc761",
+  "timestamp_start": "2026-11-21T12:51:22.334756+00:00",
+  "safety_guardrails": {
+    "RECOVERY_SIMULATION_MODE": true,
+    "EXTERNAL_DEPLOYMENT_PERMITTED": false,
+    "REAL_PRODUCTION_DESTRUCTION_PERMITTED": false
+  },
+  "steps": [
+    {
+      "step": 1,
+      "name": "preflight_safety_check",
+      "status": "PASSED",
+      "details": "Simulation mode locked (RECOVERY_SIMULATION_MODE=true). Zero cloud infrastructure touched.",
+      "timestamp": "2026-11-21T12:51:22.334756+00:00"
+    }
+  ],
+  "scenarios": {
+    "scenario_a_success": {
+      "duration_seconds": 0.1536,
+      "incident": {
+        "id": "INC-70bb38",
+        "title": "Service checkout-api entered CrashLoopBackOff (exit code 137)",
+        "service_name": "checkout-api",
+        "severity": "critical",
+        "status": "resolved",
+        "recovery_status": "Verified",
+        "created_at": "2026-11-21T12:51:22.436747+00:00",
+        "resolved_at": "2026-11-21T12:51:22.488377+00:00"
+      },
+      "evidence": [
+        {
+          "kind": "log",
+          "detail": "Container killed by Linux kernel OOMKiller (exit code 137)"
+        },
+        {
+          "kind": "metric",
+          "detail": "Memory utilization reached 512MB limit (100%)"
+        }
+      ],
+      "recovery_action": {
+        "id": "REC-e70c69",
+        "incident_id": "INC-70bb38",
+        "service_name": "checkout-api",
+        "root_cause": "memory_exhaustion",
+        "recommended_action": "restart_service",
+        "confidence": 0.96,
+        "allowlist_verified": true,
+        "approval_required": true,
+        "status": "completed",
+        "approver": "admin@autoheal.io",
+        "verification": "passed"
+      },
+      "verification_result": "PASSED",
+      "audit_hash": "5c06310ec2d31efb17e9e9c71363595e48590f5016134022c3dba3ad01964cc0",
+      "status": "SUCCESS"
+    },
+    "scenario_b_failed_recovery": {
+      "duration_seconds": 0.0507,
+      "incident": {
+        "id": "INC-ddcba5",
+        "title": "Filesystem corruption on db-read-replica-02",
+        "service_name": "db-read-replica-02",
+        "severity": "critical",
+        "status": "investigating",
+        "recovery_status": "Verification Failed - Escalated to On-Call SRE",
+        "created_at": "2026-11-21T12:51:22.488377+00:00"
+      },
+      "recovery_action": {
+        "id": "REC-7b22c0",
+        "incident_id": "INC-ddcba5",
+        "service_name": "db-read-replica-02",
+        "root_cause": "disk_corruption",
+        "recommended_action": "restart_service",
+        "status": "failed",
+        "approval_required": true,
+        "verification": "failed"
+      },
+      "verification_result": "FAILED",
+      "incident_resolved": false,
+      "audit_hash": "662124fafe20d64bdc81f8e7b590d2151f54a939608a085109ea463f46ec6e16",
+      "status": "SUCCESS_VERIFIED_UNRESOLVED"
+    }
+  },
+  "total_duration_seconds": 0.2043,
+  "status": "ALL_SCENARIOS_PASSED",
+  "timestamp_finish": "2026-11-21T12:51:22.539031+00:00"
+}
