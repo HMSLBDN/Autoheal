@@ -1,9 +1,11 @@
 import type {
+  AgentCertificate,
   AnalyticsSummary,
   Anomaly,
   DeploymentImpact,
   EscalationEvent,
   EscalationPolicy,
+  IdentityProvider,
   Incident,
   IncidentAnalysis,
   IncidentAssignment,
@@ -17,16 +19,21 @@ import type {
   NotificationChannel,
   NotificationDelivery,
   NotificationSubscription,
+  ObservabilityMetrics,
   Prediction,
   PreventiveRecommendation,
   RecoveryAction,
   RecoveryPolicy,
   ReleaseEvaluation,
+  SecurityAuditEvent,
+  SecurityAuditSummary,
   Service,
   ServiceMetrics,
   ServiceRisk,
   TimelineItem,
+  TraceSpan,
   UnifiedTimeline,
+  UserSession,
   WebhookDeliveryAttempt,
   WebhookEndpoint,
 } from '@/types'
@@ -569,3 +576,126 @@ export const timelineApi = {
     return apiRequest<UnifiedTimeline>(`/api/v1/timeline${query}`, { signal })
   },
 }
+
+// ==============================================================================
+// Phase 10: Enterprise SSO, Sessions, Observability, and mTLS APIs
+// ==============================================================================
+
+export const ssoApi = {
+  async listProviders(signal?: AbortSignal): Promise<IdentityProvider[]> {
+    return apiRequest<IdentityProvider[]>('/api/v1/auth/sso/providers', { signal })
+  },
+  async createProvider(payload: {
+    name: string
+    idp_type?: string
+    issuer_url: string
+    client_id: string
+    client_secret: string
+    metadata_url?: string
+    role_mapping_json?: Record<string, any>
+    allowed_domains?: string[]
+    is_active?: boolean
+    is_enforced?: boolean
+  }): Promise<IdentityProvider> {
+    return apiRequest<IdentityProvider>('/api/v1/auth/sso/providers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async updateProvider(id: string, payload: Partial<IdentityProvider>): Promise<IdentityProvider> {
+    return apiRequest<IdentityProvider>(`/api/v1/auth/sso/providers/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+  async deleteProvider(id: string): Promise<void> {
+    await apiRequest<void>(`/api/v1/auth/sso/providers/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+  },
+  async initiateAuthorize(providerId: string, redirectUri: string): Promise<{ authorization_url: string; state: string; code_verifier: string }> {
+    return apiRequest<{ authorization_url: string; state: string; code_verifier: string }>('/api/v1/auth/sso/authorize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider_id: providerId, redirect_uri: redirectUri }),
+    })
+  },
+  async handleCallback(payload: {
+    provider_id: string
+    code: string
+    state: string
+    code_verifier: string
+    redirect_uri: string
+  }): Promise<any> {
+    return apiRequest<any>('/api/v1/auth/sso/callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  },
+}
+
+export const sessionsApi = {
+  async listSessions(signal?: AbortSignal): Promise<UserSession[]> {
+    return apiRequest<UserSession[]>('/api/v1/auth/sessions', { signal })
+  },
+  async revokeSession(sessionId: string, reason?: string): Promise<void> {
+    await apiRequest<void>(`/api/v1/auth/sessions/${encodeURIComponent(sessionId)}/revoke`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+  },
+  async revokeAllSessions(keepCurrent: boolean = true): Promise<{ revoked_sessions_count: number }> {
+    return apiRequest<{ revoked_sessions_count: number }>(`/api/v1/auth/sessions/revoke-all?keep_current=${keepCurrent}`, {
+      method: 'POST',
+    })
+  },
+  async listSecurityEvents(limit: number = 50, signal?: AbortSignal): Promise<SecurityAuditEvent[]> {
+    return apiRequest<SecurityAuditEvent[]>(`/api/v1/auth/security/audit-events?limit=${limit}`, { signal })
+  },
+  async getSecuritySummary(signal?: AbortSignal): Promise<SecurityAuditSummary> {
+    return apiRequest<SecurityAuditSummary>('/api/v1/auth/security/audit-summary', { signal })
+  },
+}
+
+export const observabilityApi = {
+  async getStats(signal?: AbortSignal): Promise<{ status: string; data: ObservabilityMetrics }> {
+    return apiRequest<{ status: string; data: ObservabilityMetrics }>('/api/v1/observability/stats', { signal })
+  },
+  async getTraces(limit: number = 50, signal?: AbortSignal): Promise<{ status: string; count: number; traces: TraceSpan[] }> {
+    return apiRequest<{ status: string; count: number; traces: TraceSpan[] }>(`/api/v1/observability/traces?limit=${limit}`, { signal })
+  },
+  async getMetricsText(signal?: AbortSignal): Promise<string> {
+    const res = await fetch('/api/v1/observability/metrics', { signal })
+    return res.text()
+  },
+}
+
+export const agentCertApi = {
+  async issueCert(agentId: string, validDays: number = 365, commonName?: string): Promise<AgentCertificate & { private_key_pem?: string; ca_cert_pem: string }> {
+    return apiRequest<AgentCertificate & { private_key_pem?: string; ca_cert_pem: string }>(`/api/v1/agents/${encodeURIComponent(agentId)}/cert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentId, valid_days: validDays, common_name: commonName }),
+    })
+  },
+  async getCert(agentId: string, signal?: AbortSignal): Promise<AgentCertificate> {
+    return apiRequest<AgentCertificate>(`/api/v1/agents/${encodeURIComponent(agentId)}/cert`, { signal })
+  },
+  async revokeCert(agentId: string, reason?: string): Promise<void> {
+    await apiRequest<void>(`/api/v1/agents/${encodeURIComponent(agentId)}/revoke-cert`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+  },
+  async verifyMtls(agentId: string): Promise<{ status: string; is_valid: boolean; details: any }> {
+    return apiRequest<{ status: string; is_valid: boolean; details: any }>(`/api/v1/agents/${encodeURIComponent(agentId)}/verify-mtls`, {
+      method: 'POST',
+    })
+  },
+}
+

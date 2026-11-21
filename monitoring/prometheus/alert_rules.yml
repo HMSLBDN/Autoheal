@@ -1,0 +1,78 @@
+# AutoHeal DevOps — Enterprise Prometheus Alerting Rules
+# Governs production SLO alerts, security alerts, and infrastructure health.
+
+groups:
+  - name: autoheal_enterprise_slo_alerts
+    rules:
+      - alert: HighHttp5xxErrorRate
+        expr: |
+          (sum(rate(autoheal_http_requests_total{status=~"5.."}[5m]))
+          / sum(rate(autoheal_http_requests_total[5m]))) * 100 > 5
+        for: 3m
+        labels:
+          severity: critical
+          tier: platform
+        annotations:
+          summary: "AutoHeal API HTTP 5xx error rate exceeds 5%"
+          description: "Current error rate is {{ $value | printf \"%.2f\" }}% over the last 5 minutes. Core platform availability SLA at risk."
+          runbook_url: "https://docs.autoheal.dev/runbooks/high-error-rate"
+
+      - alert: HighApiLatencyP99
+        expr: |
+          (rate(autoheal_http_request_duration_seconds[5m])
+          / rate(autoheal_http_requests_total[5m])) > 0.500
+        for: 5m
+        labels:
+          severity: warning
+          tier: performance
+        annotations:
+          summary: "API request latency exceeds 500ms"
+          description: "Average API endpoint latency is {{ $value | printf \"%.3f\" }}s. Degradation may affect webhook and agent processing."
+          runbook_url: "https://docs.autoheal.dev/runbooks/api-latency"
+
+      - alert: DatabaseConnectionPoolExhaustion
+        expr: |
+          (autoheal_db_pool_checked_out / autoheal_db_pool_size) * 100 > 85
+        for: 2m
+        labels:
+          severity: critical
+          tier: database
+        annotations:
+          summary: "PostgreSQL connection pool utilization > 85%"
+          description: "Checked out connections ({{ $value | printf \"%.1f\" }}%) approaching pool saturation limit. Risk of request queuing and connection timeout errors."
+          runbook_url: "https://docs.autoheal.dev/runbooks/db-pool-exhaustion"
+
+      - alert: AgentMtlsCertificateExpiringSoon
+        expr: autoheal_agent_certs_expiring_soon > 0
+        for: 1h
+        labels:
+          severity: warning
+          tier: security
+        annotations:
+          summary: "Infrastructure Agent mTLS certificates expiring within 14 days"
+          description: "One or more infrastructure agent certificates require automated or manual rotation before expiration."
+          runbook_url: "https://docs.autoheal.dev/runbooks/cert-rotation"
+
+      - alert: SecurityReplayAttackDetected
+        expr: sum(rate(autoheal_security_audit_events_total{event="token_replay_detected"}[5m])) > 0
+        for: 0m
+        labels:
+          severity: critical
+          tier: security
+        annotations:
+          summary: "Session or Refresh Token Replay attack detected"
+          description: "AutoHeal has detected a token replay event and automatically invalidated the token family. Immediate security audit recommended."
+          runbook_url: "https://docs.autoheal.dev/runbooks/replay-attack-response"
+
+      - alert: AutonomousRecoveryFailureRateHigh
+        expr: |
+          (sum(rate(autoheal_recovery_executions_total{status="failed"}[15m]))
+          / sum(rate(autoheal_recovery_executions_total[15m]))) * 100 > 25
+        for: 5m
+        labels:
+          severity: warning
+          tier: recovery
+        annotations:
+          summary: "Autonomous recovery action failure rate > 25%"
+          description: "Multiple recovery attempts failed health verification. Operator escalation advised."
+          runbook_url: "https://docs.autoheal.dev/runbooks/recovery-failures"

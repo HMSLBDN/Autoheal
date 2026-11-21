@@ -116,3 +116,49 @@ def generate_password_reset_token() -> str:
     Generates a cryptographically strong one-time token for password reset flows.
     """
     return secrets.token_urlsafe(32)
+
+
+def _get_fernet_cipher() -> Any:
+    """
+    Initializes a Fernet symmetric cipher derived from application SECRET_KEY.
+    """
+    import base64
+    from cryptography.fernet import Fernet
+    key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode()).digest())
+    return Fernet(key)
+
+
+def encrypt_secret(plaintext: str) -> str:
+    """
+    Encrypts a sensitive credential (e.g. IdP client_secret) at rest using AES/Fernet.
+    """
+    if not plaintext:
+        return ""
+    cipher = _get_fernet_cipher()
+    return cipher.encrypt(plaintext.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_secret(ciphertext: str) -> str:
+    """
+    Decrypts an encrypted credential back to plaintext.
+    """
+    if not ciphertext:
+        return ""
+    cipher = _get_fernet_cipher()
+    try:
+        return cipher.decrypt(ciphertext.encode("utf-8")).decode("utf-8")
+    except Exception as e:
+        logger.error("Failed to decrypt secret: %s", e)
+        return ""
+
+
+def mask_secret(secret: str, visible_tail: int = 4) -> str:
+    """
+    Returns a masked version of a credential for safe UI display (e.g. '••••••••abcd').
+    """
+    if not secret:
+        return "••••••••"
+    if len(secret) <= visible_tail:
+        return "••••"
+    return "•" * 8 + secret[-visible_tail:]
+

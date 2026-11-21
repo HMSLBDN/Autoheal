@@ -1,16 +1,35 @@
 import type {
+  AgentCertificate,
   AnalyticsSummary,
   Anomaly,
+  EscalationEvent,
+  EscalationPolicy,
+  IdentityProvider,
   Incident,
+  IncidentAssignment,
+  IncidentComment,
   IncidentCorrelationGroup,
   InfrastructureAgent,
   IntelligenceOverview,
   ModelEvaluationMetric,
+  NotificationChannel,
+  NotificationDelivery,
+  NotificationSubscription,
+  ObservabilityMetrics,
   Prediction,
   PreventiveRecommendation,
   RecoveryAction,
+  ReleaseEvaluation,
+  SecurityAuditEvent,
+  SecurityAuditSummary,
   Service,
   ServiceRisk,
+  TimelineItem,
+  TraceSpan,
+  UnifiedTimeline,
+  UserSession,
+  WebhookDeliveryAttempt,
+  WebhookEndpoint,
 } from '@/types'
 
 export const demoServices: Service[] = [
@@ -391,17 +410,6 @@ export const demoIntelligenceOverview: IntelligenceOverview = {
   recentCorrelations: demoCorrelations,
 }
 
-
-
-import type {
-  EscalationPolicy,
-  IncidentComment,
-  NotificationChannel,
-  NotificationDelivery,
-  ReleaseEvaluation,
-  UnifiedTimeline,
-} from '@/types'
-
 export const demoNotificationChannels: NotificationChannel[] = [
   {
     id: 'chan-1',
@@ -552,3 +560,168 @@ export const demoTimeline: UnifiedTimeline = {
     { id: 't6', category: 'recovery', title: 'Advisory Rollback Proposed', detail: 'Action: Rollback to previous stable release (REC-611)', serviceName: 'customer-web', status: 'pending_approval', timestamp: '09:43:14' },
   ],
 }
+
+export const demoIdentityProviders: IdentityProvider[] = [
+  {
+    id: 'idp-okta-1',
+    organization_id: 'demo-org-1',
+    name: 'Okta Enterprise SSO',
+    idp_type: 'oidc',
+    issuer_url: 'https://auth.autoheal-enterprise.okta.com',
+    client_id: '0oa4819k29s81093k0h7',
+    client_secret_masked: '••••••••8109',
+    metadata_url: 'https://auth.autoheal-enterprise.okta.com/.well-known/openid-configuration',
+    role_mapping_json: {
+      admin: ['DevOps-Admins', 'Platform-Engineers'],
+      operator: ['SRE-Team', 'Incident-Response'],
+      viewer: ['Engineers', 'Read-Only-Staff'],
+    },
+    allowed_domains: ['autoheal.dev', 'enterprise.io'],
+    is_active: true,
+    is_enforced: false,
+    created_at: '2026-11-20T10:00:00Z',
+    updated_at: '2026-11-21T08:00:00Z',
+  },
+  {
+    id: 'idp-google-1',
+    organization_id: 'demo-org-1',
+    name: 'Google Workspace OIDC',
+    idp_type: 'oidc',
+    issuer_url: 'https://accounts.google.com',
+    client_id: '10928391823-client.apps.googleusercontent.com',
+    client_secret_masked: '••••••••g921',
+    metadata_url: 'https://accounts.google.com/.well-known/openid-configuration',
+    role_mapping_json: {
+      admin: ['gsuite-admins'],
+      operator: ['gsuite-operators'],
+      viewer: ['gsuite-all'],
+    },
+    allowed_domains: ['autoheal.dev'],
+    is_active: true,
+    is_enforced: false,
+    created_at: '2026-11-20T11:00:00Z',
+    updated_at: '2026-11-21T08:30:00Z',
+  },
+]
+
+export const demoUserSessions: UserSession[] = [
+  {
+    id: 'sess-1',
+    user_id: 'usr-admin-1',
+    organization_id: 'demo-org-1',
+    family_id: 'fam-alpha-128',
+    ip_address: '198.51.100.24',
+    user_agent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0.0.0',
+    device_name: 'Chrome on Windows',
+    is_active: true,
+    expires_at: '2026-11-28T16:00:00Z',
+    created_at: 'Today, 14:20:00',
+    is_current: true,
+  },
+  {
+    id: 'sess-2',
+    user_id: 'usr-admin-1',
+    organization_id: 'demo-org-1',
+    family_id: 'fam-beta-492',
+    ip_address: '198.51.100.89',
+    user_agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15',
+    device_name: 'Safari on macOS (Dev Laptop)',
+    is_active: true,
+    expires_at: '2026-11-27T10:15:00Z',
+    created_at: 'Yesterday, 10:15:00',
+    is_current: false,
+  },
+]
+
+export const demoSecurityAuditEvents: SecurityAuditEvent[] = [
+  {
+    id: 'sec-ev-1',
+    organization_id: 'demo-org-1',
+    user_id: 'usr-admin-1',
+    event_type: 'cert_rotated',
+    severity: 'INFO',
+    ip_address: '198.51.100.24',
+    user_agent: 'AutoHeal-Operator-Agent/1.0',
+    details_json: { agent_id: 'agent-k8s-prod', serial_number: '7f91a823', valid_days: 365 },
+    created_at: 'Today, 15:10:02',
+  },
+  {
+    id: 'sec-ev-2',
+    organization_id: 'demo-org-1',
+    user_id: 'usr-admin-1',
+    event_type: 'idp_configured',
+    severity: 'INFO',
+    ip_address: '198.51.100.24',
+    details_json: { provider_name: 'Okta Enterprise SSO', issuer_url: 'https://auth.autoheal-enterprise.okta.com' },
+    created_at: 'Today, 14:45:00',
+  },
+  {
+    id: 'sec-ev-3',
+    organization_id: 'demo-org-1',
+    user_id: null,
+    event_type: 'token_replay_detected',
+    severity: 'CRITICAL',
+    ip_address: '203.0.113.195',
+    details_json: { compromised_family_id: 'fam-old-891', action_taken: 'invalidated_entire_token_family' },
+    created_at: 'Today, 11:14:22',
+  },
+]
+
+export const demoSecurityAuditSummary: SecurityAuditSummary = {
+  total_events: 42,
+  critical_events: 1,
+  warning_events: 3,
+  recent_suspicious_activities: [
+    {
+      id: 'sec-ev-3',
+      organization_id: 'demo-org-1',
+      user_id: null,
+      event_type: 'token_replay_detected',
+      severity: 'CRITICAL',
+      ip_address: '203.0.113.195',
+      details_json: { compromised_family_id: 'fam-old-891', action_taken: 'invalidated_entire_token_family' },
+      created_at: 'Today, 11:14:22',
+    },
+  ],
+}
+
+export const demoAgentCertificates: AgentCertificate[] = [
+  {
+    id: 'cert-1',
+    organization_id: 'demo-org-1',
+    agent_id: 'agent-k8s-prod',
+    serial_number: '7f91a823c914b',
+    fingerprint_sha256: 'a4b89c719e2014b2d9183918a27419ef00192a84bb192847c1a92841029481a9',
+    subject_dn: 'agent-k8s-prod-primary',
+    issuer_dn: 'CN=AutoHeal Root CA (demo-org-1)',
+    valid_from: '2026-11-20T00:00:00Z',
+    valid_to: '2027-11-20T00:00:00Z',
+    is_revoked: false,
+    cert_pem: '-----BEGIN CERTIFICATE-----\nMIIB...[DEMO]...==\n-----END CERTIFICATE-----',
+    created_at: 'Today, 15:10:02',
+  },
+]
+
+export const demoObservabilityMetrics: ObservabilityMetrics = {
+  total_requests: 148920,
+  error_requests: 182,
+  error_rate_pct: 0.12,
+  avg_latency_ms: 42.8,
+  total_mtls_handshakes: 9410,
+  successful_mtls_handshakes: 9408,
+  db_pool: {
+    pool_size: 20,
+    checked_out: 4,
+    overflow: 0,
+  },
+  total_recoveries: 38,
+  total_security_events: 42,
+}
+
+export const demoTraceSpans: TraceSpan[] = [
+  { trace_id: 'tr-8a1928301', span_id: 'sp-1', name: 'POST /api/v1/auth/sso/callback', service: 'autoheal-api', duration_ms: 18.4, status: 'OK', attributes: { 'http.status': 200, 'client_id': '[REDACTED]' }, timestamp: 'Today, 15:20:00' },
+  { trace_id: 'tr-9b1029411', span_id: 'sp-2', name: 'GET /api/v1/observability/stats', service: 'autoheal-api', duration_ms: 4.2, status: 'OK', attributes: { 'http.status': 200 }, timestamp: 'Today, 15:20:05' },
+  { trace_id: 'tr-7c1928412', span_id: 'sp-3', name: 'POST /api/v1/agents/verify-mtls', service: 'agent-mTLS', duration_ms: 28.6, status: 'OK', attributes: { 'tls.cipher': 'TLS_AES_256_GCM_SHA384', 'tls.client_cert': 'verified' }, timestamp: 'Today, 15:20:10' },
+  { trace_id: 'tr-4d1029482', span_id: 'sp-4', name: 'SELECT database.pool.checkout', service: 'postgresql-asyncpg', duration_ms: 2.1, status: 'OK', attributes: { 'db.name': 'autoheal_production' }, timestamp: 'Today, 15:20:12' },
+]
+

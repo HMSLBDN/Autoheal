@@ -467,3 +467,108 @@ export interface UnifiedTimeline {
   totalEvents: number
   items: TimelineItem[]
 }
+
+// ==============================================================================
+// Phase 10: Enterprise Security, Observability, and mTLS Types
+// ==============================================================================
+
+export interface IdentityProvider {
+  id: string
+  organization_id: string
+  name: string
+  idp_type: string
+  issuer_url: string
+  client_id: string
+  client_secret_masked: string
+  metadata_url?: string | null
+  jwks_url?: string | null
+  authorization_endpoint?: string | null
+  token_endpoint?: string | null
+  userinfo_endpoint?: string | null
+  role_mapping_json: Record<string, string[]>
+  allowed_domains: string[]
+  is_active: boolean
+  is_enforced: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface UserSession {
+  id: string
+  user_id: string
+  organization_id: string
+  family_id: string
+  ip_address?: string | null
+  user_agent?: string | null
+  device_name?: string | null
+  is_active: boolean
+  expires_at: string
+  created_at: string
+  revoked_at?: string | null
+  revocation_reason?: string | null
+  is_current?: boolean
+}
+
+export interface SecurityAuditEvent {
+  id: string
+  organization_id: string
+  user_id?: string | null
+  event_type: string
+  severity: 'INFO' | 'WARNING' | 'CRITICAL'
+  ip_address?: string | null
+  user_agent?: string | null
+  details_json: Record<string, any>
+  created_at: string
+}
+
+export interface SecurityAuditSummary {
+  total_events: number
+  critical_events: number
+  warning_events: number
+  recent_suspicious_activities: SecurityAuditEvent[]
+}
+
+export interface AgentCertificate {
+  id: string
+  organization_id: string
+  agent_id: string
+  serial_number: string
+  fingerprint_sha256: string
+  subject_dn: string
+  issuer_dn: string
+  valid_from: string
+  valid_to: string
+  is_revoked: boolean
+  revoked_at?: string | null
+  revocation_reason?: string | null
+  cert_pem: string
+  created_at: string
+}
+
+export interface ObservabilityMetrics {
+  total_requests: number
+  error_requests: number
+  error_rate_pct: number
+  avg_latency_ms: number
+  total_mtls_handshakes: number
+  successful_mtls_handshakes: number
+  db_pool: {
+    pool_size: number
+    checked_out: number
+    overflow: number
+  }
+  total_recoveries: number
+  total_security_events: number
+}
+
+export interface TraceSpan {
+  trace_id: string
+  span_id: string
+  name: string
+  service: string
+  duration_ms: number
+  status: string
+  attributes: Record<string, any>
+  timestamp: string
+}
+

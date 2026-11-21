@@ -25,6 +25,14 @@ from app.schemas.agent import (
     AgentRegisterResponse,
     AgentResponse,
 )
+from app.models.phase10 import AgentCertificate
+from app.schemas.phase10 import (
+    AgentCertIssueRequest,
+    AgentCertResponse,
+    AgentCertBundleResponse,
+    AgentCertRevokeRequest,
+)
+from app.services.infrastructure.mtls_ca import AgentCA
 from app.services.events import event_broadcaster
 
 logger = logging.getLogger(__name__)
@@ -283,3 +291,151 @@ async def revoke_agent(
         message=f"Agent '{agent_id}' authorization successfully revoked.",
         status="revoked",
     )
+
+
+# ==============================================================================
+# Phase 10: Infrastructure Agent Mutual TLS (mTLS) Certificate Endpoints
+# ==============================================================================
+
+@router.post(
+    "/{agent_id}/cert",
+    response_model=AgentCertBundleResponse,
+    summary="Issue or rotate infrastructure agent mTLS certificate",
+)
+async def issue_agent_cert(
+    agent_id: str,
+    payload: Optional[AgentCertIssueRequest] = None,
+    org: OrgDep = None,
+    current_user: RequireOperatorDep = None,
+    db: DatabaseDep = None,
+) -> AgentCertBundleResponse:
+    """Issues a new X.509 client certificate for mTLS authentication."""
+    stmt = select(InfrastructureAgent).where(
+        InfrastructureAgent.id == agent_id,
+        InfrastructureAgent.organization_id == org.id,
+    )
+    res = await db.execute(stmt)
+    agent = res.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Infrastructure agent not found.")
+
+    valid_days = payload.valid_days if payload else 365
+    common_name = (payload.common_name if payload else None) or f"{agent.name}-{agent_id[:8]}"
+
+    cert_record, cert_pem, key_pem, ca_pem = await AgentCA.issue_agent_certificate(
+        db=db,
+        organization_id=org.id,
+        agent_id=agent_id,
+        common_name=common_name,
+        valid_days=valid_days,
+    )
+
+    return AgentCertBundleResponse(
+        id=cert_record.id,
+        organization_id=cert_record.organization_id,
+        agent_id=cert_record.agent_id,
+        serial_number=cert_record.serial_number,
+        fingerprint_sha256=cert_record.fingerprint_sha256,
+        subject_dn=cert_record.subject_dn,
+        issuer_dn=cert_record.issuer_dn,
+        valid_from=cert_record.valid_from,
+        valid_to=cert_record.valid_to,
+        is_revoked=cert_record.is_revoked,
+        revoked_at=cert_record.revoked_at,
+        revocation_reason=cert_record.revocation_reason,
+        cert_pem=cert_pem,
+        private_key_pem=key_pem,
+        ca_cert_pem=ca_pem,
+        created_at=cert_record.created_at,
+    )
+
+
+@router.get(
+    "/{agent_id}/cert",
+    response_model=AgentCertResponse,
+    summary="Get active mTLS certificate for agent",
+)
+async def get_agent_cert(
+    agent_id: str,
+    org: OrgDep = None,
+    current_user: RequireOperatorDep = None,
+    db: DatabaseDep = None,
+) -> AgentCertResponse:
+    """Retrieves active certificate metadata for the specified agent."""
+    stmt = (
+        select(AgentCertificate)
+        .where(
+            AgentCertificate.agent_id == agent_id,
+            AgentCertificate.organization_id == org.id,
+            AgentCertificate.is_revoked == False,
+        )
+        .order_by(desc(AgentCertificate.created_at))
+    )
+    res = await db.execute(stmt)
+    cert = res.scalars().first()
+    if not cert:
+        raise HTTPException(status_code=404, detail="No active certificate found for agent.")
+
+    return AgentCertResponse.model_validate(cert)
+
+
+@router.post(
+    "/{agent_id}/revoke-cert",
+    summary="Revoke active mTLS certificate for agent",
+)
+async def revoke_agent_cert(
+    agent_id: str,
+    payload: Optional[AgentCertRevokeRequest] = None,
+    org: OrgDep = None,
+    current_user: RequireOperatorDep = None,
+    db: DatabaseDep = None,
+):
+    """Revokes active client certificate, immediately invalidating agent mTLS connection."""
+    reason = payload.reason if payload else "Operator manual revocation"
+    success = await AgentCA.revoke_certificate(
+        db=db,
+        organization_id=org.id,
+        agent_id=agent_id,
+        reason=reason,
+    )
+    if not success:
+        raise HTTPException(status_code=404, detail="No active certificate found to revoke.")
+
+    return {"status": "success", "message": "Agent mTLS certificate revoked."}
+
+
+@router.post(
+    "/{agent_id}/verify-mtls",
+    summary="Verify agent mTLS certificate and test TLS handshake",
+)
+async def verify_agent_mtls(
+    agent_id: str,
+    org: OrgDep = None,
+    current_user: RequireOperatorDep = None,
+    db: DatabaseDep = None,
+):
+    """Cryptographically verifies certificate against CA and executes live mTLS handshake test."""
+    stmt = (
+        select(AgentCertificate)
+        .where(
+            AgentCertificate.agent_id == agent_id,
+            AgentCertificate.organization_id == org.id,
+        )
+        .order_by(desc(AgentCertificate.created_at))
+    )
+    res = await db.execute(stmt)
+    cert = res.scalars().first()
+    if not cert:
+        raise HTTPException(status_code=404, detail="No certificate found for agent.")
+
+    verification = await AgentCA.verify_agent_certificate(
+        db=db,
+        organization_id=org.id,
+        cert_pem=cert.cert_pem,
+    )
+    return {
+        "status": "success",
+        "is_valid": verification.get("valid", False),
+        "details": verification,
+    }
+

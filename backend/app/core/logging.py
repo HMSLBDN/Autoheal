@@ -15,6 +15,9 @@ import uuid
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.metrics import enterprise_metrics
+from app.core.telemetry import trace_span
+
 logger = logging.getLogger("autoheal.access")
 
 SENSITIVE_KEYS = {
@@ -131,11 +134,22 @@ class RequestTracingMiddleware(BaseHTTPMiddleware):
 
         start_time = time.time()
         try:
-            response = await call_next(request)
+            with trace_span(
+                f"{request.method} {telemetry._normalize_path(request.url.path)}",
+                service="autoheal-api",
+                attributes={
+                    "http.method": request.method,
+                    "http.target": request.url.path,
+                    "http.user_agent": request.headers.get("user-agent", "unknown"),
+                    "request_id": request_id,
+                },
+            ):
+                response = await call_next(request)
             duration_s = time.time() - start_time
             duration_ms = round(duration_s * 1000, 2)
 
             telemetry.record_request(request.method, request.url.path, response.status_code, duration_s)
+            enterprise_metrics.record_request(request.method, request.url.path, response.status_code, duration_s)
 
             response.headers["X-Request-ID"] = request_id
 

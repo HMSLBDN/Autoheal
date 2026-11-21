@@ -135,6 +135,7 @@ def create_engine_and_session_factory(db_url: Optional[str] = None):
 
 # Create AsyncEngine singleton and session factory
 engine, async_session_factory = create_engine_and_session_factory()
+async_engine = engine
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

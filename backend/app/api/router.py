@@ -18,11 +18,14 @@ from app.api.routes import (
     incidents,
     intelligence,
     notifications,
+    observability,
     policies,
     recoveries,
     releases,
     services,
+    sessions,
     settings,
+    sso,
     timeline,
     webhooks,
 )
@@ -30,6 +33,8 @@ from app.api.routes import (
 api_router = APIRouter()
 
 api_router.include_router(auth.router)
+api_router.include_router(sso.router)
+api_router.include_router(sessions.router)
 api_router.include_router(agents.router)
 api_router.include_router(policies.router)
 api_router.include_router(alerts.router)
@@ -41,6 +46,7 @@ api_router.include_router(analytics.router)
 api_router.include_router(intelligence.router)
 api_router.include_router(events.router)
 api_router.include_router(settings.router)
+api_router.include_router(observability.router)
 api_router.include_router(notifications.router)
 api_router.include_router(webhooks.router)
 api_router.include_router(collaboration.router)

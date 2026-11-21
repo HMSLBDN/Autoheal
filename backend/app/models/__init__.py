@@ -47,6 +47,13 @@ from app.models.enterprise import (
     ReleaseEvaluation,
     ReleaseEvaluationMetric,
 )
+from app.models.phase10 import (
+    IdentityProviderConfig,
+    UserIdentityMapping,
+    UserSession,
+    SecurityAuditEvent,
+    AgentCertificate,
+)
 
 __all__ = [
     "Base",
@@ -86,4 +93,9 @@ __all__ = [
     "EscalationEvent",
     "ReleaseEvaluation",
     "ReleaseEvaluationMetric",
+    "IdentityProviderConfig",
+    "UserIdentityMapping",
+    "UserSession",
+    "SecurityAuditEvent",
+    "AgentCertificate",
 ]
