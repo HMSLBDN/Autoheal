@@ -156,17 +156,19 @@ def perform_backup(
 
 def main():
     parser = argparse.ArgumentParser(description="AutoHeal DevOps Database Backup Utility")
+    parser.add_argument("--db-url", default=None, help="Database connection URL (defaults to DATABASE_URL setting)")
     parser.add_argument("--output-dir", default="./backups", help="Target directory for backup archives")
     parser.add_argument("--retention-days", type=int, default=7, help="Days of backups to keep")
     parser.add_argument("--dry-run", action="store_true", help="Simulate backup without executing")
     args = parser.parse_args()
 
     settings = get_settings()
+    target_url = args.db_url or settings.DATABASE_URL
     out_dir = Path(args.output_dir).resolve()
 
     try:
         perform_backup(
-            database_url=settings.DATABASE_URL,
+            database_url=target_url,
             output_dir=out_dir,
             retention_days=args.retention_days,
             dry_run=args.dry_run,

@@ -527,3 +527,27 @@ def test_cookie_attributes_in_production_environment(auth_client: TestClient):
         assert "httponly" in set_cookie_header
     finally:
         current_settings.APP_ENV = original_env
+
+
+def test_sliding_window_rate_limiter_enforcement():
+    """Verifies that the auth sliding-window rate limiter throttles abuse after limit threshold."""
+    from app.core.rate_limit import SlidingWindowRateLimiter
+
+    limiter = SlidingWindowRateLimiter(max_requests=5, window_seconds=10)
+    key = "test_rate_limit_bruteforce_attacker"
+
+    # 5 allowed requests
+    for _ in range(5):
+        allowed, retry_after = limiter.is_allowed(key)
+        assert allowed is True
+        assert retry_after == 0
+
+    # 6th request must be throttled
+    allowed, retry_after = limiter.is_allowed(key)
+    assert allowed is False
+    assert retry_after > 0
+
+    # Reset clears history
+    limiter.reset(key)
+    allowed, _ = limiter.is_allowed(key)
+    assert allowed is True

@@ -2,6 +2,7 @@
 param (
     [string]$OutputDir = "./backups",
     [int]$RetentionDays = 7,
+    [string]$DbUrl = "",
     [switch]$DryRun
 )
 
@@ -21,6 +22,10 @@ $ArgsList = @(
     "--output-dir", $OutputDir,
     "--retention-days", $RetentionDays
 )
+
+if ($DbUrl -ne "") {
+    $ArgsList += @("--db-url", $DbUrl)
+}
 
 if ($DryRun) {
     $ArgsList += "--dry-run"

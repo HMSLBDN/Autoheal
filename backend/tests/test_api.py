@@ -208,3 +208,37 @@ def test_organization_multi_tenant_isolation(client: TestClient, seed_data: dict
 
     # Reset back to Org A
     app.dependency_overrides[get_current_org] = lambda: org_a
+
+
+def test_prometheus_metrics_endpoint():
+    """Prometheus exposition metrics endpoint exposes standard counters, gauges, and pool stats."""
+    with TestClient(app) as test_client:
+        # Trigger an endpoint to generate telemetry
+        test_client.get("/api/v1/health")
+
+        res = test_client.get("/metrics")
+        assert res.status_code == 200
+        assert "text/plain" in res.headers["content-type"]
+        text = res.text
+        assert "autoheal_api_up 1" in text
+        assert "autoheal_database_pool_size" in text
+        assert "autoheal_http_requests_total" in text
+        assert "autoheal_http_request_duration_seconds" in text
+
+
+def test_unhandled_exception_sanitization():
+    """Unhandled server errors must return sanitized 500 JSON containing correlation request_id."""
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        # Requesting an invalid route or simulating an exception
+        # We can temporarily install a route that raises RuntimeError
+        @app.get("/api/v1/test-unhandled-crash", include_in_schema=False)
+        async def crash_endpoint():
+            raise RuntimeError("Database connection suddenly dropped with credential details: secret_pass_12345")
+
+        res = test_client.get("/api/v1/test-unhandled-crash")
+        assert res.status_code == 500
+        data = res.json()
+        assert "secret_pass_12345" not in res.text
+        assert "request_id" in data
+        assert "An unexpected internal error occurred" in data["detail"]
+        assert "X-Request-ID" in res.headers

@@ -5,7 +5,7 @@ AutoHeal DevOps — Security & Operational Audit Log Model
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 import uuid
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, utc_now
@@ -20,6 +20,9 @@ class AuditLog(Base):
     Immutable regulatory audit trail logging operations, approvals, and mutations.
     """
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_org_created", "organization_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(
         BigInteger().with_variant(Integer, "sqlite"),

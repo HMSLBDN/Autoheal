@@ -148,17 +148,19 @@ def main():
     parser = argparse.ArgumentParser(description="AutoHeal DevOps Database Restore Utility")
     parser.add_argument("--backup-file", required=True, help="Path to backup archive (.sql.gz or .sqlite.gz)")
     parser.add_argument("--confirm-target-db", required=True, help="Exact target DB name to prevent accidental restores")
+    parser.add_argument("--db-url", default=None, help="Database connection URL (defaults to DATABASE_URL setting)")
     parser.add_argument("--force-production-restore", action="store_true", help="Required override for production targets")
     parser.add_argument("--skip-pre-snapshot", action="store_true", help="Skip safety pre-restore snapshot")
     args = parser.parse_args()
 
     settings = get_settings()
+    target_url = args.db_url or settings.DATABASE_URL
     backup_path = Path(args.backup_file).resolve()
 
     try:
         perform_restore(
             backup_file=backup_path,
-            database_url=settings.DATABASE_URL,
+            database_url=target_url,
             confirm_target_db=args.confirm_target_db,
             force_production_restore=args.force_production_restore,
             skip_pre_snapshot=args.skip_pre_snapshot,

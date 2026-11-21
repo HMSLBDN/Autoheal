@@ -6,6 +6,7 @@ param (
     [Parameter(Mandatory=$true)]
     [string]$ConfirmTargetDb,
 
+    [string]$DbUrl = "",
     [switch]$ForceProductionRestore,
     [switch]$SkipPreSnapshot
 )
@@ -26,6 +27,10 @@ $ArgsList = @(
     "--backup-file", $BackupFile,
     "--confirm-target-db", $ConfirmTargetDb
 )
+
+if ($DbUrl -ne "") {
+    $ArgsList += @("--db-url", $DbUrl)
+}
 
 if ($ForceProductionRestore) {
     $ArgsList += "--force-production-restore"

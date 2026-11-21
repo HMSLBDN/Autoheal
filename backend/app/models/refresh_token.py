@@ -5,7 +5,7 @@ AutoHeal DevOps — Refresh Token Model (Session & RTR)
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 import uuid
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, utc_now
@@ -20,6 +20,9 @@ class RefreshToken(Base):
     replay attack detection, and session revocation.
     """
     __tablename__ = "refresh_tokens"
+    __table_args__ = (
+        Index("ix_refresh_tokens_user_revoked", "user_id", "is_revoked"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid,

@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DatabaseDep, get_current_user
 from app.config import get_settings
+from app.core.rate_limit import check_auth_rate_limit
 from app.core.security import (
     create_access_token,
     generate_password_reset_token,
@@ -92,6 +93,7 @@ def _to_utc(dt: datetime) -> datetime:
     response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register new user account",
+    dependencies=[Depends(check_auth_rate_limit)],
 )
 async def register(
     payload: UserRegisterRequest,
@@ -220,6 +222,7 @@ async def register(
     "/login",
     response_model=TokenResponse,
     summary="Authenticate user and issue tokens",
+    dependencies=[Depends(check_auth_rate_limit)],
 )
 async def login(
     payload: UserLoginRequest,
@@ -568,6 +571,7 @@ async def get_me(
     "/forgot-password",
     response_model=AuthMessageResponse,
     summary="Request password reset instructions",
+    dependencies=[Depends(check_auth_rate_limit)],
 )
 async def forgot_password(
     payload: ForgotPasswordRequest,
@@ -625,6 +629,7 @@ async def forgot_password(
     "/reset-password",
     response_model=AuthMessageResponse,
     summary="Reset password using one-time token",
+    dependencies=[Depends(check_auth_rate_limit)],
 )
 async def reset_password(
     payload: ResetPasswordRequest,

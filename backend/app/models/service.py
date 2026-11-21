@@ -5,7 +5,7 @@ AutoHeal DevOps — Service & Infrastructure Configuration Models
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 import uuid
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, utc_now
@@ -23,6 +23,9 @@ class Service(Base, TimestampMixin):
     Directly satisfies the frontend Service contract in types/index.ts.
     """
     __tablename__ = "services"
+    __table_args__ = (
+        Index("ix_services_org_env", "organization_id", "environment"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(100),

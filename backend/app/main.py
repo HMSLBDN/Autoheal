@@ -6,13 +6,14 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Dict
 
-from fastapi import FastAPI
-from fastapi.responses import PlainTextResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import api_router
 from app.config import get_settings
-from app.core.logging import RequestTracingMiddleware
+from app.core.logging import RequestTracingMiddleware, telemetry
+from app.database import engine
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -64,6 +65,24 @@ app.add_middleware(
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """
+    Global catch-all exception handler that sanitizes internal stack traces
+    while logging detailed errors correlated with the unique request ID.
+    """
+    request_id = getattr(request.state, "request_id", None) or "unknown"
+    logger.exception("Unhandled server exception processing request %s: %s", request_id, exc)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"An unexpected internal error occurred. Please quote request ID {request_id} to support.",
+            "request_id": request_id,
+        },
+        headers={"X-Request-ID": request_id},
+    )
+
+
 @app.get(
     "/metrics",
     response_class=PlainTextResponse,
@@ -72,10 +91,21 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 )
 async def metrics() -> PlainTextResponse:
     """Exposes application runtime telemetry metrics for Prometheus scraping."""
-    content = (
-        "# HELP autoheal_api_up Service operational status gauge\n"
-        "# TYPE autoheal_api_up gauge\n"
-        "autoheal_api_up 1\n"
+    pool = getattr(engine, "pool", None)
+    pool_size = pool.size() if pool and hasattr(pool, "size") else 0
+    try:
+        pool_overflow = max(0, pool.overflow()) if pool and hasattr(pool, "overflow") else 0
+    except Exception:
+        pool_overflow = 0
+    try:
+        pool_checkedout = pool.checkedout() if pool and hasattr(pool, "checkedout") else 0
+    except Exception:
+        pool_checkedout = 0
+
+    content = telemetry.generate_prometheus_metrics(
+        pool_size=pool_size,
+        pool_overflow=pool_overflow,
+        pool_checkedout=pool_checkedout,
     )
     return PlainTextResponse(content=content, media_type="text/plain; version=0.0.4; charset=utf-8")
 

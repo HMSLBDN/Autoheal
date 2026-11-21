@@ -5,7 +5,7 @@ AutoHeal DevOps — Incident, Evidence & Timeline Event Models
 from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional
 import uuid
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text, Uuid
+from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, utc_now
@@ -22,6 +22,10 @@ class Incident(Base, TimestampMixin):
     correlated evidence, and event timelines.
     """
     __tablename__ = "incidents"
+    __table_args__ = (
+        Index("ix_incidents_org_detected_at", "organization_id", "detected_at"),
+        Index("ix_incidents_org_status", "organization_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(
         String(50),

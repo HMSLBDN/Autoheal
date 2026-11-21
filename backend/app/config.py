@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     # API Prefix
     API_V1_STR: str = "/api/v1"
 
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = Field(
+        default=True,
+        description="Enable sliding-window rate limiting on sensitive authentication endpoints"
+    )
+
     # CORS Allowed Origins
     CORS_ORIGINS: Union[List[str], str] = Field(
         default=[

@@ -4,7 +4,7 @@ AutoHeal DevOps — Service Telemetry Metrics Model
 
 from datetime import datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, DateTime, Float, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, utc_now
@@ -18,6 +18,9 @@ class ServiceMetric(Base):
     Time-series metric sample captured for a monitored infrastructure service.
     """
     __tablename__ = "service_metrics"
+    __table_args__ = (
+        Index("ix_service_metrics_svc_sampled", "service_id", "sampled_at"),
+    )
 
     id: Mapped[int] = mapped_column(
         BigInteger().with_variant(Integer, "sqlite"),
