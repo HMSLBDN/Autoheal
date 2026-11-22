@@ -42,8 +42,8 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 - **Evidence Classification:** `SYNTHETIC`
 
 ### Scenario 2: Service Unavailable Outage (`service_unavailable`)
-- **Fault Type:** Hard HTTP 503 outage / container crash
-- **Recovery Action:** `restart_container` (cold container reboot lifecycle)
+- **Simulated Failure Condition:** Hard HTTP 503 outage / container crash (Simulated)
+- **Simulated Recovery Action:** `restart_container` (Simulated cold container reboot lifecycle)
 - **Sample Size:** $N = 5$ matched seed pairs
 - **Detection Latency:**
   - Min: $1,234.7\,ms$ · Max: $1,999.4\,ms$ · Mean: $1,552.6\,ms$ · Median: $1,516.7\,ms$ · $\sigma = \pm 280.1\,ms$
@@ -56,12 +56,12 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 - **Evidence Classification:** `SIMULATED` / `CALCULATED`
 
 ### Scenario 3: High Error Rate Surge (`high_error_rate`)
-- **Fault Type:** Elevated 500 error rate (22%)
-- **Recovery Action:** `restart_pool` (in-place worker pool recycling & process reload)
+- **Simulated Failure Condition:** Elevated 500 error rate (22%) (Simulated)
+- **Simulated Recovery Action:** `restart_pool` (Simulated in-place worker pool recycling & process reload)
 - **Sample Size:** $N = 5$ matched seed pairs
 - **Detection Latency (Sliding Window Rate Accumulation):**
   - Min: $1,584.7\,ms$ · Max: $2,349.4\,ms$ · Mean: $1,902.6\,ms$ · Median: $1,866.7\,ms$ · $\sigma = \pm 280.1\,ms$
-- **Recovery Duration (Worker Pool Recycling):**
+- **Recovery Duration (Simulated Worker Pool Recycling):**
   - Min: $1,581.9\,ms$ · Max: $2,088.6\,ms$ · Mean: $1,834.2\,ms$ · Median: $1,869.9\,ms$ · $\sigma = \pm 205.4\,ms$
 - **Total Outage Duration:**
   - Recovery Enabled: Min: $4,176.6\,ms$ · Max: $5,238.0\,ms$ · Mean: **$4,536.8\,ms$** · Median: $4,394.4\,ms$ · $P_{95} = 5,238.0\,ms$ · $\sigma = \pm 426.7\,ms$
@@ -70,12 +70,12 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 - **Evidence Classification:** `SIMULATED` / `CALCULATED`
 
 ### Scenario 4: Resource Exhaustion (`resource_exhaustion`)
-- **Fault Type:** CPU & Memory Saturation (> 90%)
-- **Recovery Action:** `scale_service` (horizontal pod replica scaling & quota expansion)
+- **Simulated Failure Condition:** CPU & Memory Saturation (> 90%) (Simulated)
+- **Simulated Recovery Action:** `scale_service` (Simulated horizontal pod replica scaling & quota expansion)
 - **Sample Size:** $N = 5$ matched seed pairs
 - **Detection Latency (Multi-Scrape Sustained Saturation Check):**
   - Min: $2,142.4\,ms$ · Max: $3,077.1\,ms$ · Mean: $2,531.0\,ms$ · Median: $2,487.0\,ms$ · $\sigma = \pm 342.4\,ms$
-- **Recovery Duration (Replica Scheduling & Provisioning):**
+- **Recovery Duration (Simulated Replica Scheduling & Provisioning):**
   - Min: $2,714.6\,ms$ · Max: $3,424.1\,ms$ · Mean: $3,067.8\,ms$ · Median: $3,117.8\,ms$ · $\sigma = \pm 287.6\,ms$
 - **Total Outage Duration:**
   - Recovery Enabled: Min: $6,313.7\,ms$ · Max: $7,701.2\,ms$ · Mean: **$6,798.8\,ms$** · Median: $6,596.7\,ms$ · $P_{95} = 7,701.2\,ms$ · $\sigma = \pm 552.4\,ms$
@@ -129,12 +129,32 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 
 ---
 
-## 5. Scenario Independence Proof
+## 5. Scenario Independence Proof & Simulated Performance Hierarchy
 
-Scenarios 2, 3, and 4 simulate distinct architectural failure modes:
-1. **Scenario 2 (`service_unavailable`):** Probes detect connection loss fast ($1,552.6\,ms$), cold container restart takes longer ($2,601.0\,ms$), yielding mean MTTR of **$5,153.6\,ms$**.
-2. **Scenario 3 (`high_error_rate`):** Sliding window rate accumulation takes longer to detect ($1,902.6\,ms$), but in-place worker pool recycling is rapid ($1,834.2\,ms$), yielding mean MTTR of **$4,536.8\,ms$**.
-3. **Scenario 4 (`resource_exhaustion`):** Multi-scrape sustained utilization check takes longest to detect ($2,531.0\,ms$), and horizontal pod scale-out takes longest ($3,067.8\,ms$), yielding mean MTTR of **$6,798.8\,ms$**.
+### Simulated Scenario Performance Hierarchy — Seed 42, N=5
+
+Scenarios 2, 3, and 4 simulate distinct failure modes with independent simulation paths, detection parameters, and simulated remediation actions. None of these actions perform live host or container mutations; all operations are strictly simulated within `RECOVERY_SIMULATION_MODE=true`:
+
+1. **Scenario 2 (`service_unavailable`) — Simulated Failure Condition: Container crash / HTTP 503:**
+   - Probes detect connection loss fast ($1,552.6 \pm 280.1\,ms$).
+   - Simulated container restart (`restart_container`) models cold process boot lifecycle ($2,601.0 \pm 246.5\,ms$).
+   - Verification readiness probe delay: $800.0\,ms$.
+   - Yields mean simulated MTTR of **$5,153.6 \pm 461.4\,ms$** (Median: $4,979.7\,ms$).
+
+2. **Scenario 3 (`high_error_rate`) — Simulated Failure Condition: Elevated 500 error rate (22%):**
+   - Sliding-window rate accumulation requires sample collection across traffic window ($1,902.6 \pm 280.1\,ms$).
+   - Simulated worker-pool recycling (`restart_pool`) models rapid in-place process reload ($1,834.2 \pm 205.4\,ms$).
+   - Warm health verification delay: $600.0\,ms$.
+   - Yields mean simulated MTTR of **$4,536.8 \pm 426.7\,ms$** (Median: $4,394.4\,ms$).
+
+3. **Scenario 4 (`resource_exhaustion`) — Simulated Failure Condition: CPU & Memory Saturation (> 90%):**
+   - Multi-scrape sustained utilization check requires consecutive confirmation cycles ($2,531.0 \pm 342.4\,ms$).
+   - Simulated service scaling (`scale_service`) models horizontal pod replica scheduling & startup ($3,067.8 \pm 287.6\,ms$).
+   - Capacity settling & traffic shedding delay: $1,000.0\,ms$.
+   - Yields mean simulated MTTR of **$6,798.8 \pm 552.4\,ms$** (Median: $6,596.7\,ms$).
+
+> [!NOTE]
+> **Safety & Scope Boundary:** Simulated container restart, worker-pool recycling, and service scaling are executed entirely as software simulation states in the experiment harness. They are never described or represented as actual live infrastructure remediation.
 
 ---
 

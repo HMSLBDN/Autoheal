@@ -41,13 +41,13 @@ An exhaustive code and data trace through the scenario pipeline revealed the fol
 
 ## 2. Genuine Scenario Independence & Architectural Modeling
 
-To establish genuine scenario independence, each scenario was decoupled and modeled according to its actual architectural and physical failure characteristics:
+To establish genuine scenario independence, each scenario was decoupled and modeled according to its distinct architectural and simulated failure characteristics (operating strictly within `RECOVERY_SIMULATION_MODE=true`; zero actual infrastructure remediation):
 
-| Scenario | Architectural Failure Mode | Allowlisted Action | Detection Model | Recovery Duration Model | Verification Delay |
+| Scenario | Simulated Failure Condition | Simulated Remediating Action | Detection Model | Recovery Duration Model | Verification Delay |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **S2: 503 Outage** | Hard container crash / connection refused | `restart_container` | Fast threshold probe failure: `1200–2100 ms` | Cold container reboot lifecycle (SIGTERM, stop, start, socket bind): `2200–3400 ms` | 800 ms (Readiness probe on `/healthz`) |
-| **S3: High Error Rate** | Elevated 500 errors (18–26%), service responding | `restart_pool` | Sliding-window sample accumulation: `1550–2450 ms` | In-place worker pool recycling & process reload: `1500–2500 ms` | 600 ms (Warm error rate check) |
-| **S4: Resource Exhaustion** | CPU & Memory saturation (> 90%), queuing delay | `scale_service` | Multi-scrape sustained utilization check: `2100–3200 ms` | Pod provisioning, replica scheduling & startup: `2600–4000 ms` | 1000 ms (Capacity settling & traffic shedding) |
+| **S2: 503 Outage** | Hard container crash / connection refused (Simulated) | `restart_container` (Simulated container reboot) | Fast threshold probe failure: `1200–2100 ms` | Cold container reboot lifecycle (SIGTERM, stop, start, socket bind): `2200–3400 ms` | 800 ms (Readiness probe on `/healthz`) |
+| **S3: High Error Rate** | Elevated 500 errors (18–26%), service responding (Simulated) | `restart_pool` (Simulated worker-pool recycling) | Sliding-window sample accumulation: `1550–2450 ms` | In-place worker pool recycling & process reload: `1500–2500 ms` | 600 ms (Warm error rate check) |
+| **S4: Resource Exhaustion** | CPU & Memory saturation (> 90%), queuing delay (Simulated) | `scale_service` (Simulated service scaling) | Multi-scrape sustained utilization check: `2100–3200 ms` | Pod provisioning, replica scheduling & startup: `2600–4000 ms` | 1000 ms (Capacity settling & traffic shedding) |
 
 All simulation parameters remain strictly enclosed within `RECOVERY_SIMULATION_MODE=true` without physical host modification or socket exposure.
 
@@ -95,17 +95,17 @@ All simulation parameters remain strictly enclosed within `RECOVERY_SIMULATION_M
 | **Outage Reduction ($\Delta T$)** | **$54,846.4\,ms$ ($91.4\%$)** | **$55,463.2\,ms$ ($92.4\%$)** | **$53,201.2\,ms$ ($88.7\%$)** | **$55,435.6\,ms$ ($92.4\%$)** |
 | **Paired Standard Error ($SE$)** | $206.4\,ms$ | $190.8\,ms$ | $247.0\,ms$ | $194.1\,ms$ |
 
-### 3.3 Physical and Operational Verification:
+### 3.3 Simulated Scenario Performance Hierarchy — Seed 42, N=5:
 1. **$S3 < S2 < S4$ Outage Duration Hierarchy:**
-   - Scenario 3 (High Error Rate) is the fastest to remediate ($4,536.8\,ms$) because worker pool recycling avoids container recreation.
-   - Scenario 2 (503 Outage) requires a full container lifecycle, yielding medium MTTR ($5,153.6\,ms$).
-   - Scenario 4 (Resource Exhaustion) requires the longest detection and container replica scheduling, yielding highest MTTR ($6,798.8\,ms$).
+   - Scenario 3 (High Error Rate) is the fastest to remediate ($4,536.8\,ms$) because simulated worker-pool recycling avoids full container recreation.
+   - Scenario 2 (503 Outage) simulates a full container lifecycle, yielding medium MTTR ($5,153.6\,ms$).
+   - Scenario 4 (Resource Exhaustion) simulates sustained multi-scrape detection and pod replica scheduling, yielding highest MTTR ($6,798.8\,ms$).
 2. **$S2 < S3 < S4$ Detection Latency Hierarchy:**
    - Scenario 2 connection loss fails probes immediately ($1,552.6\,ms$).
    - Scenario 3 error rate requires windowed traffic aggregation ($1,902.6\,ms$).
    - Scenario 4 resource saturation requires sustained multi-scrape confirmation ($2,531.0\,ms$).
 
-All three scenarios are now **mathematically distinct, operationally independent, and reproducible**.
+All three scenarios are now **mathematically distinct, operationally independent, and reproducible**. Note: All remediation actions (`restart_container`, `restart_pool`, `scale_service`) represent simulated software state-machine operations; zero actual infrastructure remediation is performed.
 
 ---
 
