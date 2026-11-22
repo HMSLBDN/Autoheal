@@ -9,7 +9,10 @@ Tests:
 """
 
 from datetime import datetime, timezone
+import logging
 import os
+import sys
+import urllib.parse
 import uuid
 
 import httpx
@@ -33,6 +36,8 @@ from app.services.recovery.executor import RecoveryExecutor
 from app.services.recovery.policy_engine import policy_engine
 from app.services.recovery.verifier import PostRecoveryVerifier
 
+logger = logging.getLogger(__name__)
+
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 test_engine = create_async_engine(
@@ -50,6 +55,78 @@ TestingSessionLocal = async_sessionmaker(
 )
 
 
+def validate_test_service_url(raw_url: str) -> str:
+    """
+    Validates that the test service URL points strictly to the isolated Docker test container.
+    Strictly requires the normalized URL to match exactly: http://autoheal_test_service:8080.
+    Rejects:
+    - Trailing slashes
+    - Any URL path
+    - Query parameters, including empty query delimiters ('?')
+    - Fragments, including empty fragment delimiters ('#')
+    - User credentials or delimiters ('@')
+    - Unexpected hostname, scheme, or port
+    """
+    if not raw_url or not isinstance(raw_url, str):
+        raise ValueError("Security violation: TEST_SERVICE_URL must be a non-empty string.")
+
+    if raw_url != raw_url.strip():
+        raise ValueError(
+            "Security violation: Test service URL must not contain surrounding whitespace."
+        )
+
+    url = raw_url
+
+    # Reject query parameter delimiters, including empty ones
+    if "?" in url:
+        raise ValueError("Security violation: Test service URL must not contain query parameters or delimiters ('?').")
+
+    # Reject fragment delimiters, including empty ones
+    if "#" in url:
+        raise ValueError("Security violation: Test service URL must not contain fragments or fragment delimiters ('#').")
+
+    # Reject credentials or credential delimiters
+    if "@" in url:
+        raise ValueError("Security violation: Test service URL must not contain user credentials or delimiters ('@').")
+
+    # Reject trailing slashes
+    if url.endswith("/"):
+        raise ValueError("Security violation: Test service URL must not contain a trailing slash.")
+
+    parsed = urllib.parse.urlparse(url)
+
+    if parsed.scheme != "http":
+        raise ValueError(f"Security violation: Test service scheme must be strictly 'http', got '{parsed.scheme}'.")
+
+    if parsed.username or parsed.password:
+        raise ValueError("Security violation: Test service URL must not contain user credentials.")
+
+    if parsed.hostname != "autoheal_test_service":
+        raise ValueError(
+            f"Security violation: Test service hostname must be strictly 'autoheal_test_service' for Docker-based execution, "
+            f"got '{parsed.hostname}'. Localhost, 127.0.0.1, and external hosts are strictly forbidden."
+        )
+
+    if parsed.port != 8080:
+        raise ValueError(f"Security violation: Test service port must be explicitly 8080, got '{parsed.port}'.")
+
+    if parsed.path:
+        raise ValueError(f"Security violation: Test service URL must not contain any path, got '{parsed.path}'.")
+
+    if parsed.query:
+        raise ValueError(f"Security violation: Test service URL must not contain query parameters, got '{parsed.query}'.")
+
+    if parsed.fragment:
+        raise ValueError(f"Security violation: Test service URL must not contain a URL fragment, got '{parsed.fragment}'.")
+
+    if url != "http://autoheal_test_service:8080":
+        raise ValueError(
+            f"Security violation: Normalized test service URL must match exactly 'http://autoheal_test_service:8080', got '{url}'."
+        )
+
+    return "http://autoheal_test_service:8080"
+
+
 @pytest_asyncio.fixture(scope="function")
 async def db_session():
     """Provides an isolated transactional database session backed by in-memory SQLite."""
@@ -63,8 +140,184 @@ async def db_session():
         await conn.run_sync(Base.metadata.drop_all)
 
 
+@pytest_asyncio.fixture(scope="function")
+async def degraded_test_service():
+    """
+    Independent async fixture establishing a degraded test service state:
+    1. Validates TEST_SERVICE_URL strictly requiring http://autoheal_test_service:8080.
+    2. Calls POST /chaos/degrade.
+    3. Verifies GET /health returns HTTP 503.
+    4. Yields the service URL to the test.
+    5. Restores the service via POST /chaos/recover during teardown.
+    6. Verifies GET /health returns HTTP 200.
+    """
+    raw_url = os.environ.get("TEST_SERVICE_URL", "http://autoheal_test_service:8080")
+    base_url = validate_test_service_url(raw_url)
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        # Setup: Degrade service
+        try:
+            degrade_resp = await client.post(f"{base_url}/chaos/degrade")
+            if degrade_resp.status_code != 200:
+                raise RuntimeError(
+                    f"Setup failure: POST /chaos/degrade returned HTTP {degrade_resp.status_code}"
+                )
+            health_resp = await client.get(f"{base_url}/health")
+            if health_resp.status_code != 503:
+                raise RuntimeError(
+                    f"Setup verification failed: Expected HTTP 503 from /health, got {health_resp.status_code}"
+                )
+        except Exception as setup_exc:
+            logger.error(
+                "[TEST_SERVICE_SETUP_ERROR] Failed to establish degraded state: %s. Attempting safety recovery.",
+                setup_exc,
+            )
+            print(f"\n[TEST_SERVICE_SETUP_ERROR] Failed to establish degraded state: {setup_exc}\n", file=sys.stderr)
+            try:
+                safety_recover = await client.post(f"{base_url}/chaos/recover")
+                if safety_recover.status_code != 200:
+                    logger.error("[TEST_SERVICE_SAFETY_RECOVER_FAILED] POST /chaos/recover returned HTTP %s", safety_recover.status_code)
+                safety_health = await client.get(f"{base_url}/health")
+                if safety_health.status_code != 200:
+                    logger.error("[TEST_SERVICE_SAFETY_RECOVER_FAILED] GET /health returned HTTP %s (expected 200)", safety_health.status_code)
+            except Exception as safety_exc:
+                logger.error("[TEST_SERVICE_SAFETY_RECOVER_FAILED] Emergency safety recovery failed: %s", safety_exc)
+                print(f"\n[TEST_SERVICE_SAFETY_RECOVER_FAILED] Emergency safety recovery failed: {safety_exc}\n", file=sys.stderr)
+            raise
+
+    test_exc = None
+    try:
+        yield base_url
+    except BaseException as exc:
+        test_exc = exc
+        raise
+    finally:
+        # Teardown: Unconditionally restore service to healthy state
+        teardown_exc = None
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                recover_resp = await client.post(f"{base_url}/chaos/recover")
+                if recover_resp.status_code != 200:
+                    raise RuntimeError(
+                        f"Teardown failure: POST /chaos/recover returned HTTP {recover_resp.status_code}"
+                    )
+                health_verify = await client.get(f"{base_url}/health")
+                if health_verify.status_code != 200:
+                    raise RuntimeError(
+                        f"Teardown verification failed: Expected HTTP 200 from /health, got {health_verify.status_code}"
+                    )
+        except Exception as err:
+            teardown_exc = err
+            logger.error(
+                "[TEST_SERVICE_TEARDOWN_FAILURE] Teardown cleanup failed for %s: %s",
+                base_url,
+                err,
+            )
+            print(
+                f"\n[TEST_SERVICE_TEARDOWN_FAILURE] Critical cleanup error for {base_url}: {err}\n",
+                file=sys.stderr,
+            )
+
+        if teardown_exc is not None:
+            if test_exc is not None:
+                raise RuntimeError(
+                    f"Teardown cleanup failed after test failure: {teardown_exc}"
+                ) from test_exc
+            else:
+                raise RuntimeError(f"Teardown cleanup failed: {teardown_exc}")
+
+
+@pytest_asyncio.fixture(scope="function")
+async def healthy_test_service():
+    """
+    Independent async fixture establishing a healthy test service state:
+    1. Validates TEST_SERVICE_URL strictly requiring http://autoheal_test_service:8080.
+    2. Ensures the service is healthy using POST /chaos/recover.
+    3. Verifies GET /health returns HTTP 200.
+    4. Yields the service URL.
+    5. Ensures the service remains healthy during teardown (POST /chaos/recover + GET /health 200).
+    """
+    raw_url = os.environ.get("TEST_SERVICE_URL", "http://autoheal_test_service:8080")
+    base_url = validate_test_service_url(raw_url)
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        # Setup: Reset to healthy state
+        try:
+            recover_resp = await client.post(f"{base_url}/chaos/recover")
+            if recover_resp.status_code != 200:
+                raise RuntimeError(
+                    f"Setup failure: POST /chaos/recover returned HTTP {recover_resp.status_code}"
+                )
+            health_resp = await client.get(f"{base_url}/health")
+            if health_resp.status_code != 200:
+                raise RuntimeError(
+                    f"Setup verification failed: Expected HTTP 200 from /health, got {health_resp.status_code}"
+                )
+        except Exception as setup_exc:
+            logger.error(
+                "[TEST_SERVICE_SETUP_ERROR] Setup failure in healthy_test_service: %s. Attempting safety recovery.",
+                setup_exc,
+            )
+            print(f"\n[TEST_SERVICE_SETUP_ERROR] Setup failure in healthy_test_service: {setup_exc}\n", file=sys.stderr)
+            try:
+                safety_recover = await client.post(f"{base_url}/chaos/recover")
+                if safety_recover.status_code != 200:
+                    logger.error("[TEST_SERVICE_SAFETY_RECOVER_FAILED] POST /chaos/recover returned HTTP %s", safety_recover.status_code)
+                safety_health = await client.get(f"{base_url}/health")
+                if safety_health.status_code != 200:
+                    logger.error("[TEST_SERVICE_SAFETY_RECOVER_FAILED] GET /health returned HTTP %s (expected 200)", safety_health.status_code)
+            except Exception as safety_exc:
+                logger.error("[TEST_SERVICE_SAFETY_RECOVER_FAILED] Emergency safety recovery failed: %s", safety_exc)
+                print(f"\n[TEST_SERVICE_SAFETY_RECOVER_FAILED] Emergency safety recovery failed: {safety_exc}\n", file=sys.stderr)
+            raise
+
+    test_exc = None
+    try:
+        yield base_url
+    except BaseException as exc:
+        test_exc = exc
+        raise
+    finally:
+        # Teardown: Ensure clean healthy state post-test
+        teardown_exc = None
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                recover_resp = await client.post(f"{base_url}/chaos/recover")
+                if recover_resp.status_code != 200:
+                    raise RuntimeError(
+                        f"Teardown failure: POST /chaos/recover returned HTTP {recover_resp.status_code}"
+                    )
+                health_verify = await client.get(f"{base_url}/health")
+                if health_verify.status_code != 200:
+                    raise RuntimeError(
+                        f"Teardown verification failed: Expected HTTP 200 from /health, got {health_verify.status_code}"
+                    )
+        except Exception as err:
+            teardown_exc = err
+            logger.error(
+                "[TEST_SERVICE_TEARDOWN_FAILURE] Teardown cleanup failed for %s: %s",
+                base_url,
+                err,
+            )
+            print(
+                f"\n[TEST_SERVICE_TEARDOWN_FAILURE] Critical cleanup error for {base_url}: {err}\n",
+                file=sys.stderr,
+            )
+
+        if teardown_exc is not None:
+            if test_exc is not None:
+                raise RuntimeError(
+                    f"Teardown cleanup failed after test failure: {teardown_exc}"
+                ) from test_exc
+            else:
+                raise RuntimeError(f"Teardown cleanup failed: {teardown_exc}")
+
+
 @pytest.mark.asyncio
-async def test_failed_verification_when_service_remains_degraded(db_session: AsyncSession):
+async def test_failed_verification_when_service_remains_degraded(
+    db_session: AsyncSession,
+    degraded_test_service: str,
+):
     """
     Test 1 — Failed verification:
     - Uses an in-memory SQLite database with sqlite+aiosqlite:///:memory:.
@@ -78,7 +331,7 @@ async def test_failed_verification_when_service_remains_degraded(db_session: Asy
       * Incident remains 'investigating'.
       * resolved_at remains None.
     """
-    test_service_url = os.environ.get("TEST_SERVICE_URL", "http://autoheal_test_service:8080")
+    test_service_url = degraded_test_service
     health_url = f"{test_service_url}/health"
 
     # Probe the isolated test service
@@ -181,7 +434,10 @@ async def test_failed_verification_when_service_remains_degraded(db_session: Asy
 
 
 @pytest.mark.asyncio
-async def test_positive_verification_after_service_restoration(db_session: AsyncSession):
+async def test_positive_verification_after_service_restoration(
+    db_session: AsyncSession,
+    healthy_test_service: str,
+):
     """
     Test 2 — Positive verification after restoration:
     - Independently test the restored service health endpoint.
@@ -192,7 +448,7 @@ async def test_positive_verification_after_service_restoration(db_session: Async
       * Incident transitions to 'resolved'.
       * resolved_at contains a valid timestamp.
     """
-    test_service_url = os.environ.get("TEST_SERVICE_URL", "http://autoheal_test_service:8080")
+    test_service_url = healthy_test_service
     health_url = f"{test_service_url}/health"
 
     # Probe restored service health endpoint
