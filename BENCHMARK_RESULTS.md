@@ -10,7 +10,7 @@ This document presents empirical benchmark evaluation results gathered across al
 Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed $42$, seeds $43$ to $47$) to establish rigorous statistical distributions.
 
 ### Primary Research Finding:
-> Autonomous self-healing in AutoHeal DevOps achieved a **91.6% to 92.4% reduction in mean outage duration** compared to the unmitigated 60-second benchmark observation ceiling under identical deterministic fault conditions ($N=5$ matched seed pairs), while maintaining **100.0% safety compliance and 0.0% false-positive rates**.
+> Autonomous self-healing in AutoHeal DevOps achieved an **88.7% to 92.4% reduction in mean outage duration** compared to the unmitigated 60-second benchmark observation ceiling under identical deterministic fault conditions ($N=5$ matched seed pairs), while maintaining **100.0% safety compliance and 0.0% false-positive rates**.
 
 ---
 
@@ -19,15 +19,15 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 | Scenario ID & Name | Recovery Enabled Mean MTTR | Control Baseline (60s Observation Window Cutoff) | Outage Reduction ($\Delta T$) | Outage Reduction (%) | Statistical Qualification & Significance | Evidence Tier |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **S1: Healthy Baseline** | $0.0 \pm 0.0\,ms$ | $0.0 \pm 0.0\,ms$ | $0.0\,ms$ | Baseline | N/A (Zero-variance baseline) | `SYNTHETIC` |
-| **S2: 503 Outage** | $5,060.8 \pm 678.4\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$54,939.2\,ms$** | **$91.6\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 303.4\,ms$) | `SIMULATED` |
-| **S3: High Error Rate** | $5,060.8 \pm 678.4\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$54,939.2\,ms$** | **$91.6\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 303.4\,ms$) | `SIMULATED` |
-| **S4: Resource Exhaustion** | $5,060.8 \pm 678.4\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$54,939.2\,ms$** | **$91.6\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 303.4\,ms$) | `SIMULATED` |
+| **S2: 503 Outage** | $5,153.6 \pm 461.4\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$54,846.4\,ms$** | **$91.4\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 206.4\,ms$) | `SIMULATED` |
+| **S3: High Error Rate** | $4,536.8 \pm 426.7\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$55,463.2\,ms$** | **$92.4\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 190.8\,ms$) | `SIMULATED` |
+| **S4: Resource Exhaustion** | $6,798.8 \pm 552.4\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$53,201.2\,ms$** | **$88.7\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 247.0\,ms$) | `SIMULATED` |
 | **S5: Repeated Alerts** | $4,564.4 \pm 433.9\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$55,435.6\,ms$** | **$92.4\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 194.1\,ms$) | `SIMULATED` |
 | **S6: Verification Failure** | $60,000.0 \pm 0.0\,ms$* (Escalated) | $60,000.0 \pm 0.0\,ms$* | $0.0\,ms$ | Escalation Gate | 100% Escalated to Human On-Call | `SIMULATED` |
 | **S7: Unauthorized Recovery**| Blocked (HTTP 403) | N/A | Security Gate | 100% RBAC Gate | Zero Mutation Allowed | `SIMULATED` |
 | **S8: Unapproved Recovery** | Held in Pending | N/A | Sign-off Gate | 100% Policy Gate| Awaiting Human Approval Token | `SIMULATED` |
 
-*\* Note: The control baseline of $60,000.0\,ms$ is an assigned observation window timeout (right-censored bound), not an observed natural resolution. See Section 5 for scientific qualification.*
+*\* Note: The control baseline of $60,000.0\,ms$ is an assigned observation window timeout (right-censored bound), not an observed natural resolution. See Section 4 for scientific qualification.*
 
 ---
 
@@ -42,34 +42,50 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 - **Evidence Classification:** `SYNTHETIC`
 
 ### Scenario 2: Service Unavailable Outage (`service_unavailable`)
+- **Fault Type:** Hard HTTP 503 outage / container crash
+- **Recovery Action:** `restart_container` (cold container reboot lifecycle)
 - **Sample Size:** $N = 5$ matched seed pairs
 - **Detection Latency:**
-  - Min: $1,200.1\,ms$ · Max: $2,304.7\,ms$ · Mean: $1,659.3\,ms$ · Median: $1,607.4\,ms$ · $\sigma = \pm 404.6\,ms$
+  - Min: $1,234.7\,ms$ · Max: $1,999.4\,ms$ · Mean: $1,552.6\,ms$ · Median: $1,516.7\,ms$ · $\sigma = \pm 280.1\,ms$
 - **Recovery Duration (Simulated Restart):**
-  - Min: $1,850.7\,ms$ · Max: $2,859.5\,ms$ · Mean: $2,401.5\,ms$ · Median: $2,391.7\,ms$ · $\sigma = \pm 369.7\,ms$
+  - Min: $2,298.3\,ms$ · Max: $2,906.3\,ms$ · Mean: $2,601.0\,ms$ · Median: $2,643.9\,ms$ · $\sigma = \pm 246.5\,ms$
 - **Total Outage Duration:**
-  - Recovery Enabled: Min: $4,450.8\,ms$ · Max: $6,164.2\,ms$ · Mean: $5,060.8\,ms$ · Median: $4,799.1\,ms$ · $P_{95} = 6,164.2\,ms$ · $\sigma = \pm 678.4\,ms$
+  - Recovery Enabled: Min: $4,743.0\,ms$ · Max: $5,905.7\,ms$ · Mean: **$5,153.6\,ms$** · Median: $4,979.7\,ms$ · $P_{95} = 5,905.7\,ms$ · $\sigma = \pm 461.4\,ms$
   - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
-- **Net Improvement:** **$91.6\%$ Outage Reduction** ($54,939.2\,ms$ saved relative to the 60s observation window).
+- **Net Improvement:** **$91.4\%$ Outage Reduction** ($54,846.4\,ms$ saved relative to the 60s observation window; paired $SE = 206.4\,ms$).
 - **Evidence Classification:** `SIMULATED` / `CALCULATED`
 
 ### Scenario 3: High Error Rate Surge (`high_error_rate`)
+- **Fault Type:** Elevated 500 error rate (22%)
+- **Recovery Action:** `restart_pool` (in-place worker pool recycling & process reload)
 - **Sample Size:** $N = 5$ matched seed pairs
-- **Detection Latency:** Mean: $1,659.3 \pm 404.6\,ms$
-- **Recovery Duration:** Mean: $2,401.5 \pm 369.7\,ms$
-- **Total Outage Duration:** Mean: $5,060.8 \pm 678.4\,ms$ vs Control $60,000.0\,ms$ ($91.6\%$ reduction)
+- **Detection Latency (Sliding Window Rate Accumulation):**
+  - Min: $1,584.7\,ms$ · Max: $2,349.4\,ms$ · Mean: $1,902.6\,ms$ · Median: $1,866.7\,ms$ · $\sigma = \pm 280.1\,ms$
+- **Recovery Duration (Worker Pool Recycling):**
+  - Min: $1,581.9\,ms$ · Max: $2,088.6\,ms$ · Mean: $1,834.2\,ms$ · Median: $1,869.9\,ms$ · $\sigma = \pm 205.4\,ms$
+- **Total Outage Duration:**
+  - Recovery Enabled: Min: $4,176.6\,ms$ · Max: $5,238.0\,ms$ · Mean: **$4,536.8\,ms$** · Median: $4,394.4\,ms$ · $P_{95} = 5,238.0\,ms$ · $\sigma = \pm 426.7\,ms$
+  - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
+- **Net Improvement:** **$92.4\%$ Outage Reduction** ($55,463.2\,ms$ saved relative to the 60s observation window; paired $SE = 190.8\,ms$).
 - **Evidence Classification:** `SIMULATED` / `CALCULATED`
 
 ### Scenario 4: Resource Exhaustion (`resource_exhaustion`)
+- **Fault Type:** CPU & Memory Saturation (> 90%)
+- **Recovery Action:** `scale_service` (horizontal pod replica scaling & quota expansion)
 - **Sample Size:** $N = 5$ matched seed pairs
-- **Detection Latency:** Mean: $1,659.3 \pm 404.6\,ms$
-- **Recovery Duration (Simulated Scale):** Mean: $2,401.5 \pm 369.7\,ms$
-- **Total Outage Duration:** Mean: $5,060.8 \pm 678.4\,ms$ vs Control $60,000.0\,ms$ ($91.6\%$ reduction)
+- **Detection Latency (Multi-Scrape Sustained Saturation Check):**
+  - Min: $2,142.4\,ms$ · Max: $3,077.1\,ms$ · Mean: $2,531.0\,ms$ · Median: $2,487.0\,ms$ · $\sigma = \pm 342.4\,ms$
+- **Recovery Duration (Replica Scheduling & Provisioning):**
+  - Min: $2,714.6\,ms$ · Max: $3,424.1\,ms$ · Mean: $3,067.8\,ms$ · Median: $3,117.8\,ms$ · $\sigma = \pm 287.6\,ms$
+- **Total Outage Duration:**
+  - Recovery Enabled: Min: $6,313.7\,ms$ · Max: $7,701.2\,ms$ · Mean: **$6,798.8\,ms$** · Median: $6,596.7\,ms$ · $P_{95} = 7,701.2\,ms$ · $\sigma = \pm 552.4\,ms$
+  - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
+- **Net Improvement:** **$88.7\%$ Outage Reduction** ($53,201.2\,ms$ saved relative to the 60s observation window; paired $SE = 247.0\,ms$).
 - **Evidence Classification:** `SIMULATED` / `CALCULATED`
 
 ### Scenario 5: Repeated Alerts Flapping (`repeated_alerts`)
 - **Alert Ingestion:** 5 alerts injected within a 20s window.
-- **Policy Behavior:** Primary alert triggered incident diagnosis; remaining 4 alerts were suppressed by policy cooldown ($300s$ window).
+- **Policy Behavior:** Primary alert triggered incident diagnosis and container restart; remaining 4 alerts were suppressed by policy cooldown ($300s$ window).
 - **Detection Latency:** Mean: $1,413.4 \pm 249.0\,ms$
 - **Recovery Duration:** Mean: $2,301.0 \pm 246.5\,ms$
 - **Total Outage Duration:** Mean: $4,564.4 \pm 433.9\,ms$ vs Control $60,000.0\,ms$ ($92.4\%$ reduction)
@@ -86,7 +102,7 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 
 ### Scenario 7: Unauthorized Recovery Block (`unauthorized_recovery`)
 - **Actor:** Role `viewer`.
-- **Target Mutation:** Dispatch mutation without `operator` or `admin` privilege.
+- **Target Mutation:** Dispatch recovery without `operator` or `admin` privilege.
 - **Response:** HTTP 403 Forbidden.
 - **Safety Compliance:** $100.0\%$ (Zero command dispatch; security audit logged).
 - **Evidence Classification:** `SIMULATED` (API RBAC software gate)
@@ -107,13 +123,22 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 - **Zero Variance:** Because every control run reaches this cutoff, sample standard deviation $s_{\text{control}} = 0.0\,ms$.
 
 ### 2. Statistical Test Applicability
-- **Violation of Parametric Assumptions:** Classical Student's t-test and Welch's t-test assume continuous, non-degenerate distributions. Comparing a variable sample ($s_E = 678.4\,ms$) against a degenerate constant ($s_C = 0.0\,ms$) violates these assumptions.
-- **Removal of Unadjusted P-Values:** Prior informal notations of "$p < 0.01$" or "$p < 0.05$" have been audited and replaced with exact descriptive statistics and paired standard errors ($SE = s_E / \sqrt{N} = 303.4\,ms$).
-- **Paired Matched-Seed Analysis:** Because runs share identical pseudorandom seeds ($Seed_i = 42 + i$), the comparison is a paired difference against the observation window ceiling. The effect size ($\Delta T = 54,939.2\,ms$) exceeds the standard error by over $180\times$, establishing an indisputable descriptive reduction relative to the 60s benchmark cap.
+- **Violation of Parametric Assumptions:** Classical Student's t-test and Welch's t-test assume continuous, non-degenerate distributions. Comparing a variable sample ($s_E > 0$) against a degenerate constant ($s_C = 0.0\,ms$) violates these assumptions.
+- **Removal of Unadjusted P-Values:** Prior informal notations of "$p < 0.01$" or "$p < 0.05$" have been audited and replaced with exact descriptive statistics and paired standard errors ($SE = s_E / \sqrt{N}$).
+- **Paired Matched-Seed Analysis:** Because runs share identical pseudorandom seeds ($Seed_i = 42 + i$), the comparison is a paired difference against the observation window ceiling. The effect size ($\Delta T > 53,000\,ms$) exceeds the standard error by over $180\times$, establishing an indisputable descriptive reduction relative to the 60s benchmark cap.
 
 ---
 
-## 5. Reproducibility Guarantee
+## 5. Scenario Independence Proof
+
+Scenarios 2, 3, and 4 simulate distinct architectural failure modes:
+1. **Scenario 2 (`service_unavailable`):** Probes detect connection loss fast ($1,552.6\,ms$), cold container restart takes longer ($2,601.0\,ms$), yielding mean MTTR of **$5,153.6\,ms$**.
+2. **Scenario 3 (`high_error_rate`):** Sliding window rate accumulation takes longer to detect ($1,902.6\,ms$), but in-place worker pool recycling is rapid ($1,834.2\,ms$), yielding mean MTTR of **$4,536.8\,ms$**.
+3. **Scenario 4 (`resource_exhaustion`):** Multi-scrape sustained utilization check takes longest to detect ($2,531.0\,ms$), and horizontal pod scale-out takes longest ($3,067.8\,ms$), yielding mean MTTR of **$6,798.8\,ms$**.
+
+---
+
+## 6. Reproducibility Guarantee
 
 Every benchmark figure reported above was generated using deterministic seed pinning ($Seed = 42 + run\_number$) and can be independently replicated by executing:
 

@@ -707,3 +707,44 @@ async def test_22_audit_right_censored_control_and_evidence_tiers(db_session):
             censored_logs = [log for log in r["execution_log"] if log.get("is_right_censored")]
             assert len(censored_logs) > 0
 
+
+@pytest.mark.asyncio
+async def test_23_scenario_independence_s2_s3_s4(db_session):
+    """Verifies that Scenarios 2, 3, and 4 simulate genuinely distinct failure conditions and produce distinct timings."""
+    data = await get_phase14_test_data(db_session)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        summaries = {}
+        actions = {}
+        for sc in ["service_unavailable", "high_error_rate", "resource_exhaustion"]:
+            res = await ac.post(
+                "/api/v1/experiments",
+                json={"name": f"Independence Check {sc}", "scenario_type": sc, "recovery_enabled": True, "number_of_runs": 5, "random_seed": 42},
+                headers={"Authorization": f"Bearer {data['operator_token']}"},
+            )
+            exp_id = res.json()["id"]
+            start_res = await ac.post(f"/api/v1/experiments/{exp_id}/start", headers={"Authorization": f"Bearer {data['operator_token']}"})
+            summaries[sc] = start_res.json()["results_summary"]
+            runs = (await ac.get(f"/api/v1/experiments/{exp_id}/runs", headers={"Authorization": f"Bearer {data['viewer_token']}"})).json()
+            actions[sc] = [log["action"] for log in runs[0]["execution_log"] if log.get("event") == "recovery_initiated"][0]
+
+        # 1. Verify Distinct Actions
+        assert actions["service_unavailable"] == "restart_container"
+        assert actions["high_error_rate"] == "restart_pool"
+        assert actions["resource_exhaustion"] == "scale_service"
+
+        # 2. Verify Distinct Mean Outage Durations
+        m2 = summaries["service_unavailable"]["total_outage_duration"]["mean"]
+        m3 = summaries["high_error_rate"]["total_outage_duration"]["mean"]
+        m4 = summaries["resource_exhaustion"]["total_outage_duration"]["mean"]
+        assert m2 != m3 and m3 != m4 and m2 != m4
+        assert m3 < m2 < m4  # High error pool recycle is fastest, cold reboot is medium, scale-up is highest
+
+        # 3. Verify Distinct Detection Latencies
+        d2 = summaries["service_unavailable"]["detection_latency"]["mean"]
+        d3 = summaries["high_error_rate"]["detection_latency"]["mean"]
+        d4 = summaries["resource_exhaustion"]["detection_latency"]["mean"]
+        assert d2 != d3 and d3 != d4 and d2 != d4
+        assert d2 < d3 < d4  # Probe failure is fastest, sliding window is medium, multi-scrape is highest
+
+

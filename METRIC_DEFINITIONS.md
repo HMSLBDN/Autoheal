@@ -25,14 +25,14 @@ Timeline ───┼───────────────────�
 - **Definition:** Elapsed duration from the moment a fault is injected or an infrastructure degradation begins until the platform generates a formal incident record.
 - **Formula:**
   $$T_{\text{detect}} = (Timestamp_{\text{detected}} - Timestamp_{\text{fault\_injected}}) \times 1000 \quad [ms]$$
-- **Evidence Classification:** `MEASURED`
+- **Evidence Classification:** `SIMULATED` / `CALCULATED` (from simulation timestamps)
 - **Applicable Scenarios:** Scenarios 2 through 8. (Scenario 1 Healthy Baseline records $0.0\,ms$ unless a false alarm occurs).
 
 ### 2. Recovery Duration ($T_{\text{recovery}}$)
-- **Definition:** Elapsed duration for the remediation adapter to execute the allowlisted action (e.g. simulated container restart or service scale-out).
+- **Definition:** Elapsed duration for the remediation adapter to execute the allowlisted action (e.g. simulated container restart, worker pool reload, or service scale-out).
 - **Formula:**
   $$T_{\text{recovery}} = (Timestamp_{\text{recovery\_completed}} - Timestamp_{\text{recovery\_started}}) \times 1000 \quad [ms]$$
-- **Evidence Classification:** `SIMULATED` / `MEASURED`
+- **Evidence Classification:** `SIMULATED`
 - **Applicable Scenarios:** Executed recovery actions only. In Control (Recovery Disabled) modes or blocked actions, $T_{\text{recovery}} = \text{null}$ (honestly treated as N/A).
 
 ### 3. Total Outage Duration / MTTR ($T_{\text{outage}}$)

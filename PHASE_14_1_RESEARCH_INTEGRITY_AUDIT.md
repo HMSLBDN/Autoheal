@@ -128,15 +128,15 @@ In classical hypothesis testing (Student's t-test or Welch's t-test):
 Because runs share identical seeds ($Seed_i = 42 + i$), the comparison is a **paired difference against the observation window ceiling**:
 $$D_i = T_{\text{cutoff}} - T_{\text{enabled}, i}$$
 For $N = 5$ trials of Scenario 2 (`service_unavailable`):
-- Enabled Outages: $[4665.9, 4799.1, 4450.8, 6164.2, 5224.0]\,ms$
-- Paired Differences: $[55334.1, 55200.9, 55549.2, 53835.8, 54776.0]\,ms$
-- Mean Reduction: $\bar{D} = 54,939.2\,ms$ ($91.6\%$ reduction)
-- Standard Error: $SE = \frac{s_E}{\sqrt{N}} = \frac{678.35}{\sqrt{5}} = 303.4\,ms$
+- Enabled Outages: $[4878.6, 4979.7, 4743.0, 5905.7, 5261.1]\,ms$
+- Paired Differences: $[55121.4, 55020.3, 55257.0, 54094.3, 54738.9]\,ms$
+- Mean Reduction: $\bar{D} = 54,846.4\,ms$ ($91.4\%$ reduction)
+- Standard Error: $SE = \frac{s_E}{\sqrt{N}} = \frac{461.43}{\sqrt{5}} = 206.4\,ms$
 
 ### 5.4 Audit Corrections:
 1. Removed all ungrounded "$p < 0.01$" and "$p < 0.05$" claims from `comparator.py`, `BENCHMARK_RESULTS.md`, and frontend mock strings.
 2. Formulated honest confidence notes:
-   > *"Descriptive benchmark: Autonomous recovery reduced mean outage duration by 91.6% (54,939 ms reduction across N=5 matched seeds, paired SE=303.4ms vs 60s observation window). Control baseline is right-censored at 60,000 ms; parametric p-values are not claimed."*
+   > *"Descriptive benchmark: Autonomous recovery reduced mean outage duration by 91.4% (54,846 ms reduction across N=5 matched seeds, paired SE=206.4ms vs 60s observation window). Control baseline is right-censored at 60,000 ms; parametric p-values are not claimed."*
 
 ---
 
@@ -148,8 +148,8 @@ We inspected all 8 scenarios and corrected misclassifications:
 | :--- | :--- | :--- | :--- |
 | **S1: Healthy Baseline** | `MEASURED` | **`SYNTHETIC`** | Baseline metrics and jitter are PRNG-generated synthetic traffic, not live production probes. |
 | **S2: 503 Outage** | `SIMULATED` | **`SIMULATED` / `CALCULATED`** | Container restart is simulated; outage duration is calculated from simulation timestamps. |
-| **S3: High Error Rate** | `SIMULATED` | **`SIMULATED` / `CALCULATED`** | Simulated error injection and policy cooldown. |
-| **S4: Resource Exhaustion** | `SIMULATED` | **`SIMULATED` / `CALCULATED`** | PRNG metric saturation; does not benchmark physical kernel cgroups or hardware. |
+| **S3: High Error Rate** | `SIMULATED` | **`SIMULATED` / `CALCULATED`** | Simulated error injection, pool recycling, and policy cooldown. |
+| **S4: Resource Exhaustion** | `SIMULATED` | **`SIMULATED` / `CALCULATED`** | PRNG metric saturation and replica scaling; does not benchmark physical kernel cgroups. |
 | **S5: Repeated Alerts** | `SIMULATED` | **`SIMULATED` / `CALCULATED`** | Synthetic alert storm validating state machine cooldown window. |
 | **S6: Verification Failure** | `SIMULATED` | **`SIMULATED`** | Readiness probe failure simulation; verified escalation state machine. |
 | **S7: Unauthorized Recovery**| `MEASURED` | **`SIMULATED`** | HTTP 403 test confirms FastAPI RBAC software gating, not physical cluster security. |
@@ -164,9 +164,9 @@ Every benchmark number across documentation files was reconciled with the determ
 | Scenario | Executed Code Output (Audited) | Prior Markdown Claim | Reconciled & Aligned Status |
 | :--- | :--- | :--- | :--- |
 | **S1 Mean MTTR** | $0.0 \pm 0.0\,ms$ | $0.0 \pm 0.0\,ms$ | **Consistent** |
-| **S2 Mean MTTR** | $5,060.8 \pm 678.4\,ms$ | $5,265.4 \pm 704.6\,ms$ | **Reconciled to Code Output** |
-| **S3 Mean MTTR** | $5,060.8 \pm 678.4\,ms$ | $4,840.2 \pm 620.1\,ms$ | **Reconciled to Code Output** |
-| **S4 Mean MTTR** | $5,060.8 \pm 678.4\,ms$ | $5,820.0 \pm 810.4\,ms$ | **Reconciled to Code Output** |
+| **S2 Mean MTTR** | $5,153.6 \pm 461.4\,ms$ | $5,265.4 \pm 704.6\,ms$ | **Reconciled to Code Output** |
+| **S3 Mean MTTR** | $4,536.8 \pm 426.7\,ms$ | $4,840.2 \pm 620.1\,ms$ | **Reconciled to Code Output** |
+| **S4 Mean MTTR** | $6,798.8 \pm 552.4\,ms$ | $5,820.0 \pm 810.4\,ms$ | **Reconciled to Code Output** |
 | **S5 Mean MTTR** | $4,564.4 \pm 433.9\,ms$ | $5,110.0 \pm 590.2\,ms$ | **Reconciled to Code Output** |
 | **S6 Outage** | $60,000.0\,ms$ (Escalated) | $60,000.0\,ms$ | **Consistent** (Right-censored) |
 | **S7 RBAC Gate** | Blocked (HTTP 403) | Rejected (HTTP 403) | **Consistent** |

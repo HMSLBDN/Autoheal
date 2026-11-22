@@ -41,21 +41,30 @@ The framework implements 8 standardized evaluation scenarios designed to test di
 
 ### Scenario 2: Service Unavailable Outage (`service_unavailable`)
 - **Objective:** Evaluate autonomous recovery under complete HTTP 503 outage compared to unmitigated manual escalation.
-- **Fault Injected:** HTTP 503 Service Unavailable, 100% error rate, latency surge.
+- **Fault Injected:** HTTP 503 Service Unavailable, 100% error rate, connection failure.
+- **Recovery Operation:** `restart_container` (cold container reboot lifecycle).
 - **Evaluation Modes:**
-  - *Recovery Enabled:* Policy triggers simulated container restart; post-recovery health probe verifies recovery; outage resolved in ~4,500–6,500ms.
-  - *Recovery Disabled (Control):* Outage remains unmitigated until benchmark timeout window (60,000ms standard).
+  - *Recovery Enabled:* Policy triggers simulated container restart; post-recovery readiness probe verifies health; outage resolved in ~4,700–5,900ms.
+  - *Recovery Disabled (Control):* Outage remains unmitigated until benchmark timeout window (60,000ms standard; right-censored).
 - **Success Criteria:** MTTR reduction > 85%, verified health check passed.
 
 ### Scenario 3: High Error Rate Surge (`high_error_rate`)
 - **Objective:** Evaluate threshold detection and policy cooldown under elevated 5xx error rates (18–26%).
 - **Fault Injected:** 500 Internal Server Error rate jumping to 22% (threshold 5.0%).
-- **Success Criteria:** Detection within ~1,500ms, simulated service cycling, error rate restored to < 0.5%.
+- **Recovery Operation:** `restart_pool` (in-place worker pool recycling & process reload).
+- **Evaluation Modes:**
+  - *Recovery Enabled:* Sliding-window rate accumulator triggers worker pool recycling; outage resolved in ~4,100–5,300ms.
+  - *Recovery Disabled (Control):* Outage remains unmitigated and right-censored at 60,000ms.
+- **Success Criteria:** Detection within ~1,900ms, error rate restored to < 0.5%, MTTR reduction > 90%.
 
 ### Scenario 4: Resource Exhaustion (`resource_exhaustion`)
 - **Objective:** Evaluate saturation response under CPU and memory pressure exceeding 95%.
 - **Fault Injected:** CPU 92–98.5%, memory 88–96%, latency degradation.
-- **Success Criteria:** Policy identifies capacity bottleneck, triggers simulated horizontal scale-out, CPU restored to < 45%.
+- **Recovery Operation:** `scale_service` (horizontal pod replica provisioning & scaling).
+- **Evaluation Modes:**
+  - *Recovery Enabled:* Multi-scrape saturation check triggers replica scale-out; stabilization verified; outage resolved in ~6,300–7,700ms.
+  - *Recovery Disabled (Control):* Outage remains unmitigated and right-censored at 60,000ms.
+- **Success Criteria:** Policy identifies capacity bottleneck, triggers horizontal scale-out, CPU restored to < 45%.
 
 ### Scenario 5: Repeated Alerts Flapping (`repeated_alerts`)
 - **Objective:** Validate policy cooldown windows and deduplication mechanisms to prevent cascading remediation loops.

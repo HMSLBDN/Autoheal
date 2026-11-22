@@ -162,17 +162,17 @@ class ExperimentRunner:
                 total_outage_ms = 0.0
                 rec_success = True
 
-        elif scenario in ("service_unavailable", "high_error_rate", "resource_exhaustion"):
-            # Scenarios 2, 3, 4: Outage / High Error / Saturation
+        elif scenario == "service_unavailable":
+            # Scenario 2: Hard HTTP 503 Outage / Container Failure
             t_fault = t_base + timedelta(milliseconds=500)
             execution_log.append({
                 "event": "fault_injected",
-                "detail": f"Simulated {scenario} fault injected for {target_service}.",
+                "detail": f"Simulated complete HTTP 503 outage injected for {target_service}.",
                 "timestamp": t_fault.isoformat(),
             })
 
-            # Detection Latency
-            det_lat_ms = round(rng.uniform(1150.0, 2450.0), 1)
+            # Fast threshold detection on connection failure / heartbeat loss
+            det_lat_ms = round(rng.uniform(1200.0, 2100.0), 1)
             t_detect = t_fault + timedelta(milliseconds=det_lat_ms)
             incident_id = f"INC-SIM-{rng.randint(10000, 99999)}"
             execution_log.append({
@@ -189,12 +189,12 @@ class ExperimentRunner:
                 execution_log.append({
                     "event": "recovery_initiated",
                     "action_id": recovery_action_id,
-                    "action": "restart_container" if scenario != "resource_exhaustion" else "scale_service",
+                    "action": "restart_container",
                     "timestamp": t_rec_start.isoformat(),
                 })
 
-                # Recovery Execution
-                rec_dur_ms = round(rng.uniform(1800.0, 3600.0), 1)
+                # Cold container reboot lifecycle (SIGTERM, container stop, container start, socket bind)
+                rec_dur_ms = round(rng.uniform(2200.0, 3400.0), 1)
                 t_rec_end = t_rec_start + timedelta(milliseconds=rec_dur_ms)
                 execution_log.append({
                     "event": "recovery_simulated",
@@ -202,7 +202,7 @@ class ExperimentRunner:
                     "timestamp": t_rec_end.isoformat(),
                 })
 
-                # Post-Recovery Health Verification
+                # Health verification probe (/healthz endpoint readiness check)
                 rec_verified = True
                 rec_success = True
                 t_restored = t_rec_end + timedelta(milliseconds=800)
@@ -215,6 +215,134 @@ class ExperimentRunner:
                 })
             else:
                 # Recovery Disabled: Outage unmitigated until benchmark timeout (60,000ms standard)
+                rec_attempted = False
+                rec_verified = False
+                rec_success = False
+                total_outage_ms = 60000.0
+                execution_log.append({
+                    "event": "recovery_disabled",
+                    "detail": "Autonomous remediation disabled; incident unmitigated and right-censored at 60,000ms observation window.",
+                    "total_outage_ms": total_outage_ms,
+                    "is_right_censored": True,
+                    "timestamp": t_detect.isoformat(),
+                })
+
+        elif scenario == "high_error_rate":
+            # Scenario 3: Elevated 5xx Error Rate Surge (18-26%)
+            t_fault = t_base + timedelta(milliseconds=500)
+            execution_log.append({
+                "event": "fault_injected",
+                "detail": f"Simulated elevated 500 error rate (22%) injected for {target_service}.",
+                "timestamp": t_fault.isoformat(),
+            })
+
+            # Sliding-window rate accumulation requires sample collection across traffic window
+            det_lat_ms = round(rng.uniform(1550.0, 2450.0), 1)
+            t_detect = t_fault + timedelta(milliseconds=det_lat_ms)
+            incident_id = f"INC-SIM-{rng.randint(10000, 99999)}"
+            execution_log.append({
+                "event": "incident_detected",
+                "incident_id": incident_id,
+                "latency_ms": det_lat_ms,
+                "timestamp": t_detect.isoformat(),
+            })
+
+            if recovery_enabled:
+                rec_attempted = True
+                recovery_action_id = f"REC-SIM-{rng.randint(10000, 99999)}"
+                t_rec_start = t_detect + timedelta(milliseconds=200)
+                execution_log.append({
+                    "event": "recovery_initiated",
+                    "action_id": recovery_action_id,
+                    "action": "restart_pool",
+                    "timestamp": t_rec_start.isoformat(),
+                })
+
+                # In-place worker pool recycling / process reload is faster than cold container reboot
+                rec_dur_ms = round(rng.uniform(1500.0, 2500.0), 1)
+                t_rec_end = t_rec_start + timedelta(milliseconds=rec_dur_ms)
+                execution_log.append({
+                    "event": "recovery_simulated",
+                    "duration_ms": rec_dur_ms,
+                    "timestamp": t_rec_end.isoformat(),
+                })
+
+                # Health verification on error-rate stabilization (warm check)
+                rec_verified = True
+                rec_success = True
+                t_restored = t_rec_end + timedelta(milliseconds=600)
+                total_outage_ms = round((t_restored - t_fault).total_seconds() * 1000.0, 1)
+                execution_log.append({
+                    "event": "health_verified",
+                    "status": "passed",
+                    "total_outage_ms": total_outage_ms,
+                    "timestamp": t_restored.isoformat(),
+                })
+            else:
+                rec_attempted = False
+                rec_verified = False
+                rec_success = False
+                total_outage_ms = 60000.0
+                execution_log.append({
+                    "event": "recovery_disabled",
+                    "detail": "Autonomous remediation disabled; incident unmitigated and right-censored at 60,000ms observation window.",
+                    "total_outage_ms": total_outage_ms,
+                    "is_right_censored": True,
+                    "timestamp": t_detect.isoformat(),
+                })
+
+        elif scenario == "resource_exhaustion":
+            # Scenario 4: CPU & Memory Saturation (> 90%)
+            t_fault = t_base + timedelta(milliseconds=500)
+            execution_log.append({
+                "event": "fault_injected",
+                "detail": f"Simulated CPU/memory resource exhaustion injected for {target_service}.",
+                "timestamp": t_fault.isoformat(),
+            })
+
+            # Multi-scrape sustained threshold check (2 consecutive scrape cycles to confirm saturation)
+            det_lat_ms = round(rng.uniform(2100.0, 3200.0), 1)
+            t_detect = t_fault + timedelta(milliseconds=det_lat_ms)
+            incident_id = f"INC-SIM-{rng.randint(10000, 99999)}"
+            execution_log.append({
+                "event": "incident_detected",
+                "incident_id": incident_id,
+                "latency_ms": det_lat_ms,
+                "timestamp": t_detect.isoformat(),
+            })
+
+            if recovery_enabled:
+                rec_attempted = True
+                recovery_action_id = f"REC-SIM-{rng.randint(10000, 99999)}"
+                t_rec_start = t_detect + timedelta(milliseconds=200)
+                execution_log.append({
+                    "event": "recovery_initiated",
+                    "action_id": recovery_action_id,
+                    "action": "scale_service",
+                    "timestamp": t_rec_start.isoformat(),
+                })
+
+                # Horizontal replica provisioning / pod scaling & scheduling
+                rec_dur_ms = round(rng.uniform(2600.0, 4000.0), 1)
+                t_rec_end = t_rec_start + timedelta(milliseconds=rec_dur_ms)
+                execution_log.append({
+                    "event": "recovery_simulated",
+                    "duration_ms": rec_dur_ms,
+                    "timestamp": t_rec_end.isoformat(),
+                })
+
+                # Health verification on capacity stabilization and traffic shedding
+                rec_verified = True
+                rec_success = True
+                t_restored = t_rec_end + timedelta(milliseconds=1000)
+                total_outage_ms = round((t_restored - t_fault).total_seconds() * 1000.0, 1)
+                execution_log.append({
+                    "event": "health_verified",
+                    "status": "passed",
+                    "total_outage_ms": total_outage_ms,
+                    "timestamp": t_restored.isoformat(),
+                })
+            else:
                 rec_attempted = False
                 rec_verified = False
                 rec_success = False
