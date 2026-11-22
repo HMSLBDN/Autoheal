@@ -748,3 +748,60 @@ async def test_23_scenario_independence_s2_s3_s4(db_session):
         assert d2 < d3 < d4  # Probe failure is fastest, sliding window is medium, multi-scrape is highest
 
 
+@pytest.mark.asyncio
+async def test_24_outage_duration_exact_additive_decomposition(db_session):
+    """
+    Verifies that total outage duration strictly satisfies:
+    T_outage = T_detect + T_dispatch + T_rec + T_verify
+    where T_dispatch is exactly 200.0 ms (intentional policy evaluation & dispatch overhead)
+    and T_verify is the scenario-specific verification delay (800ms for S2, 600ms for S3, 1000ms for S4).
+    """
+    from app.services.experiment.runner import ExperimentRunner
+
+    expected_delays = {
+        "service_unavailable": 800.0,
+        "high_error_rate": 600.0,
+        "resource_exhaustion": 1000.0,
+    }
+
+    for scenario, expected_verify in expected_delays.items():
+        for run_num in range(1, 6):
+            seed = 42 + run_num
+            res = await ExperimentRunner.run_scenario_iteration(
+                scenario=scenario,
+                recovery_enabled=True,
+                seed=seed,
+                target_service="srv-cart",
+            )
+            t_fault = res["fault_injected_at"]
+            t_detect = res["detected_at"]
+            t_rec_start = res["recovery_started_at"]
+            t_rec_end = res["recovery_completed_at"]
+            t_restored = res["health_restored_at"]
+
+            t_detect_ms = res["detection_latency_ms"]
+            t_rec_ms = res["recovery_duration_ms"]
+            t_outage_ms = res["total_outage_duration_ms"]
+
+            # 1. Detection latency check
+            assert abs((t_detect - t_fault).total_seconds() * 1000.0 - t_detect_ms) < 1e-4
+
+            # 2. Recovery dispatch overhead check (intentional 200.0 ms policy evaluation delay)
+            t_dispatch_ms = round((t_rec_start - t_detect).total_seconds() * 1000.0, 1)
+            assert t_dispatch_ms == 200.0
+
+            # 3. Recovery duration check
+            assert abs((t_rec_end - t_rec_start).total_seconds() * 1000.0 - t_rec_ms) < 1e-4
+
+            # 4. Verification delay check
+            t_verify_ms = round((t_restored - t_rec_end).total_seconds() * 1000.0, 1)
+            assert t_verify_ms == expected_verify
+
+            # 5. Exact additive formula check:
+            # T_outage == T_detect + T_dispatch + T_rec + T_verify
+            expected_total = round(t_detect_ms + t_dispatch_ms + t_rec_ms + t_verify_ms, 1)
+            assert t_outage_ms == expected_total
+            assert abs((t_restored - t_fault).total_seconds() * 1000.0 - t_outage_ms) < 1e-4
+
+
+

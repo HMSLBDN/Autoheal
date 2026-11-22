@@ -31,6 +31,17 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 
 ---
 
+### The Additive Outage Duration Model:
+In all scenarios with autonomous remediation enabled, total outage duration is computed as the exact wall-clock span from fault injection to health restoration:
+$$T_{\text{outage}} = (t_{\text{restored}} - t_{\text{fault}}) = T_{\text{detect}} + T_{\text{dispatch}} + T_{\text{recovery}} + T_{\text{verify}}$$
+where:
+1. **$T_{\text{detect}}$:** Detection latency from fault injection to platform anomaly detection.
+2. **$T_{\text{dispatch}}$:** Recovery initiation & policy evaluation dispatch delay ($200.0\,ms$ in standard scenarios, $250.0\,ms$ in flapping suppression).
+3. **$T_{\text{recovery}}$:** Remediation execution duration (simulated process restart, worker pool reload, or replica scaling).
+4. **$T_{\text{verify}}$:** Post-recovery readiness and health check verification delay ($800.0\,ms$ for S2; $600.0\,ms$ for S3; $1,000.0\,ms$ for S4).
+
+---
+
 ## 3. Detailed Scenario Breakdowns (Base Seed: 42, N = 5)
 
 ### Scenario 1: Healthy Baseline (`healthy_baseline`)
@@ -45,11 +56,24 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 - **Simulated Failure Condition:** Hard HTTP 503 outage / container crash (Simulated)
 - **Simulated Recovery Action:** `restart_container` (Simulated cold container reboot lifecycle)
 - **Sample Size:** $N = 5$ matched seed pairs
-- **Detection Latency:**
-  - Min: $1,234.7\,ms$ · Max: $1,999.4\,ms$ · Mean: $1,552.6\,ms$ · Median: $1,516.7\,ms$ · $\sigma = \pm 280.1\,ms$
-- **Recovery Duration (Simulated Restart):**
-  - Min: $2,298.3\,ms$ · Max: $2,906.3\,ms$ · Mean: $2,601.0\,ms$ · Median: $2,643.9\,ms$ · $\sigma = \pm 246.5\,ms$
-- **Total Outage Duration:**
+- **Additive Components ($ms$):**
+  - Detection Latency ($T_{\text{detect}}$): Min: $1,234.7$ · Max: $1,999.4$ · Mean: $1,552.6 \pm 280.1$ · Median: $1,516.7$
+  - Dispatch Overhead ($T_{\text{dispatch}}$): Fixed $200.0 \pm 0.0$ (Policy evaluation, allowlist matching, task scheduling)
+  - Recovery Duration ($T_{\text{recovery}}$): Min: $2,298.3$ · Max: $2,906.3$ · Mean: $2,601.0 \pm 246.5$ · Median: $2,643.9$
+  - Verification Probe Delay ($T_{\text{verify}}$): Fixed $800.0 \pm 0.0$ (/healthz readiness probe delay)
+
+**Raw Run Additive Breakdown (S2):**
+
+| Run | Seed | $T_{\text{detect}}$ ($ms$) | $T_{\text{dispatch}}$ ($ms$) | $T_{\text{recovery}}$ ($ms$) | $T_{\text{verify}}$ ($ms$) | Total Outage $T_{\text{outage}}$ ($ms$) | Action Executed | Outcome |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- | :--- |
+| 1 | 43 | 1,234.7 | 200.0 | 2,643.9 | 800.0 | **4,878.6** | `restart_container` | Restored / Verified |
+| 2 | 44 | 1,567.7 | 200.0 | 2,412.0 | 800.0 | **4,979.7** | `restart_container` | Restored / Verified |
+| 3 | 45 | 1,444.7 | 200.0 | 2,298.3 | 800.0 | **4,743.0** | `restart_container` | Restored / Verified |
+| 4 | 46 | 1,999.4 | 200.0 | 2,906.3 | 800.0 | **5,905.7** | `restart_container` | Restored / Verified |
+| 5 | 47 | 1,516.7 | 200.0 | 2,744.4 | 800.0 | **5,261.1** | `restart_container` | Restored / Verified |
+| **Mean** | — | **1,552.6** | **200.0** | **2,601.0** | **800.0** | **5,153.6** | — | — |
+
+- **Total Outage Duration Distribution:**
   - Recovery Enabled: Min: $4,743.0\,ms$ · Max: $5,905.7\,ms$ · Mean: **$5,153.6\,ms$** · Median: $4,979.7\,ms$ · $P_{95} = 5,905.7\,ms$ · $\sigma = \pm 461.4\,ms$
   - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
 - **Net Improvement:** **$91.4\%$ Outage Reduction** ($54,846.4\,ms$ saved relative to the 60s observation window; paired $SE = 206.4\,ms$).
@@ -59,11 +83,24 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 - **Simulated Failure Condition:** Elevated 500 error rate (22%) (Simulated)
 - **Simulated Recovery Action:** `restart_pool` (Simulated in-place worker pool recycling & process reload)
 - **Sample Size:** $N = 5$ matched seed pairs
-- **Detection Latency (Sliding Window Rate Accumulation):**
-  - Min: $1,584.7\,ms$ · Max: $2,349.4\,ms$ · Mean: $1,902.6\,ms$ · Median: $1,866.7\,ms$ · $\sigma = \pm 280.1\,ms$
-- **Recovery Duration (Simulated Worker Pool Recycling):**
-  - Min: $1,581.9\,ms$ · Max: $2,088.6\,ms$ · Mean: $1,834.2\,ms$ · Median: $1,869.9\,ms$ · $\sigma = \pm 205.4\,ms$
-- **Total Outage Duration:**
+- **Additive Components ($ms$):**
+  - Detection Latency ($T_{\text{detect}}$): Min: $1,584.7$ · Max: $2,349.4$ · Mean: $1,902.6 \pm 280.1$ · Median: $1,866.7$
+  - Dispatch Overhead ($T_{\text{dispatch}}$): Fixed $200.0 \pm 0.0$ (Policy evaluation, allowlist matching, task scheduling)
+  - Recovery Duration ($T_{\text{recovery}}$): Min: $1,581.9$ · Max: $2,088.6$ · Mean: $1,834.2 \pm 205.4$ · Median: $1,869.9$
+  - Verification Probe Delay ($T_{\text{verify}}$): Fixed $600.0 \pm 0.0$ (Warm health check)
+
+**Raw Run Additive Breakdown (S3):**
+
+| Run | Seed | $T_{\text{detect}}$ ($ms$) | $T_{\text{dispatch}}$ ($ms$) | $T_{\text{recovery}}$ ($ms$) | $T_{\text{verify}}$ ($ms$) | Total Outage $T_{\text{outage}}$ ($ms$) | Action Executed | Outcome |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- | :--- |
+| 1 | 43 | 1,584.7 | 200.0 | 1,869.9 | 600.0 | **4,254.6** | `restart_pool` | Restored / Verified |
+| 2 | 44 | 1,917.7 | 200.0 | 1,676.7 | 600.0 | **4,394.4** | `restart_pool` | Restored / Verified |
+| 3 | 45 | 1,794.7 | 200.0 | 1,581.9 | 600.0 | **4,176.6** | `restart_pool` | Restored / Verified |
+| 4 | 46 | 2,349.4 | 200.0 | 2,088.6 | 600.0 | **5,238.0** | `restart_pool` | Restored / Verified |
+| 5 | 47 | 1,866.7 | 200.0 | 1,953.7 | 600.0 | **4,620.4** | `restart_pool` | Restored / Verified |
+| **Mean** | — | **1,902.6** | **200.0** | **1,834.2** | **600.0** | **4,536.8** | — | — |
+
+- **Total Outage Duration Distribution:**
   - Recovery Enabled: Min: $4,176.6\,ms$ · Max: $5,238.0\,ms$ · Mean: **$4,536.8\,ms$** · Median: $4,394.4\,ms$ · $P_{95} = 5,238.0\,ms$ · $\sigma = \pm 426.7\,ms$
   - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
 - **Net Improvement:** **$92.4\%$ Outage Reduction** ($55,463.2\,ms$ saved relative to the 60s observation window; paired $SE = 190.8\,ms$).
@@ -73,10 +110,28 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 - **Simulated Failure Condition:** CPU & Memory Saturation (> 90%) (Simulated)
 - **Simulated Recovery Action:** `scale_service` (Simulated horizontal pod replica scaling & quota expansion)
 - **Sample Size:** $N = 5$ matched seed pairs
-- **Detection Latency (Multi-Scrape Sustained Saturation Check):**
-  - Min: $2,142.4\,ms$ · Max: $3,077.1\,ms$ · Mean: $2,531.0\,ms$ · Median: $2,487.0\,ms$ · $\sigma = \pm 342.4\,ms$
-- **Recovery Duration (Simulated Replica Scheduling & Provisioning):**
-  - Min: $2,714.6\,ms$ · Max: $3,424.1\,ms$ · Mean: $3,067.8\,ms$ · Median: $3,117.8\,ms$ · $\sigma = \pm 287.6\,ms$
+- **Additive Components ($ms$):**
+  - Detection Latency ($T_{\text{detect}}$): Min: $2,142.4$ · Max: $3,077.1$ · Mean: $2,531.0 \pm 342.4$ · Median: $2,487.0$
+  - Dispatch Overhead ($T_{\text{dispatch}}$): Fixed $200.0 \pm 0.0$ (Policy evaluation, allowlist matching, task scheduling)
+  - Recovery Duration ($T_{\text{recovery}}$): Min: $2,714.6$ · Max: $3,424.1$ · Mean: $3,067.8 \pm 287.6$ · Median: $3,117.8$
+  - Verification Probe Delay ($T_{\text{verify}}$): Fixed $1,000.0 \pm 0.0$ (Capacity settling & shedding delay)
+
+**Raw Run Additive Breakdown (S4):**
+
+| Run | Seed | $T_{\text{detect}}$ ($ms$) | $T_{\text{dispatch}}$ ($ms$) | $T_{\text{recovery}}$ ($ms$) | $T_{\text{verify}}$ ($ms$) | Total Outage $T_{\text{outage}}$ ($ms$) | Action Executed | Outcome |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- | :--- |
+| 1 | 43 | 2,142.4 | 200.0 | 3,117.8 | 1,000.0 | **6,460.2** | `scale_service` | Restored / Verified |
+| 2 | 44 | 2,549.4 | 200.0 | 2,847.3 | 1,000.0 | **6,596.7** | `scale_service` | Restored / Verified |
+| 3 | 45 | 2,399.1 | 200.0 | 2,714.6 | 1,000.0 | **6,313.7** | `scale_service` | Restored / Verified |
+| 4 | 46 | 3,077.1 | 200.0 | 3,424.1 | 1,000.0 | **7,701.2** | `scale_service` | Restored / Verified |
+| 5 | 47 | 2,487.0 | 200.0 | 3,235.1 | 1,000.0 | **6,922.1** | `scale_service` | Restored / Verified |
+| **Mean** | — | **2,531.0** | **200.0** | **3,067.8** | **1,000.0** | **6,798.8** | — | — |
+
+- **Total Outage Duration Distribution:**
+  - Recovery Enabled: Min: $6,313.7\,ms$ · Max: $7,701.2\,ms$ · Mean: **$6,798.8\,ms$** · Median: $6,596.7\,ms$ · $P_{95} = 7,701.2\,ms$ · $\sigma = \pm 552.4\,ms$
+  - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
+- **Net Improvement:** **$88.7\%$ Outage Reduction** ($53,201.2\,ms$ saved relative to the 60s observation window; paired $SE = 247.0\,ms$).
+- **Evidence Classification:** `SIMULATED` / `CALCULATED`
 - **Total Outage Duration:**
   - Recovery Enabled: Min: $6,313.7\,ms$ · Max: $7,701.2\,ms$ · Mean: **$6,798.8\,ms$** · Median: $6,596.7\,ms$ · $P_{95} = 7,701.2\,ms$ · $\sigma = \pm 552.4\,ms$
   - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
@@ -126,6 +181,13 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 - **Violation of Parametric Assumptions:** Classical Student's t-test and Welch's t-test assume continuous, non-degenerate distributions. Comparing a variable sample ($s_E > 0$) against a degenerate constant ($s_C = 0.0\,ms$) violates these assumptions.
 - **Removal of Unadjusted P-Values:** Prior informal notations of "$p < 0.01$" or "$p < 0.05$" have been audited and replaced with exact descriptive statistics and paired standard errors ($SE = s_E / \sqrt{N}$).
 - **Paired Matched-Seed Analysis:** Because runs share identical pseudorandom seeds ($Seed_i = 42 + i$), the comparison is a paired difference against the observation window ceiling. The effect size ($\Delta T > 53,000\,ms$) exceeds the standard error by over $180\times$, establishing an indisputable descriptive reduction relative to the 60s benchmark cap.
+
+### 3. Investigation of the 200 ms Dispatch Overhead
+- **Exact Interval:** $t_{\text{rec\_start}} - t_{\text{detect}} = 200.0\,ms$.
+- **Architectural Meaning:** This intentional fixed duration represents the platform's policy evaluation, allowlist verification, RBAC role validation, and asynchronous worker task queuing latency.
+- **Additive Decomposition:** In every executed recovery run, total outage duration strictly satisfies:
+  $$T_{\text{outage}} = T_{\text{detect}} + 200.0\,ms + T_{\text{recovery}} + T_{\text{verify}}$$
+- **Reporting Clarity:** In previous summary tables, only $T_{\text{detect}}$ and $T_{\text{recovery}}$ were listed, creating an apparent 200 ms gap when summed with verification delays. The tables in Section 3 now explicitly display $T_{\text{dispatch}} = 200.0\,ms$, guaranteeing exact additive reconciliation across all 15 raw runs.
 
 ---
 
