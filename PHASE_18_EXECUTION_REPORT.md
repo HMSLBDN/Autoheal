@@ -73,7 +73,21 @@ In addition, a comprehensive security audit of the recovery execution pipeline w
 
 ---
 
-## 5. Artifacts & Changed Files
+## 5. Regression & Controlled Test Execution Results
+
+Following the implementation of service-layer approval enforcement, a focused regression test run was executed sequentially across the relevant test modules:
+
+| Test Suite | Tests Passed | Tests Failed | Execution Verdict | Notes |
+|---|:---:|:---:|:---:|---|
+| `tests/test_phase18_e2e_validation.py` | 13 | 0 | **PASS (100%)** | Full end-to-end incident & recovery validation |
+| `tests/test_recovery_engine.py` | 4 | 0 | **PASS (100%)** | Allowlist, execution verification, escalation, RBAC |
+| `tests/test_performance_reliability.py` | 5 | 0 | **PASS (100%)** | Idempotency benchmark (0.51ms), concurrency, SSE tickets |
+| `tests/test_phase17_integration.py` | 1 | 1 | **PARTIAL** | Test 2 (restored HTTP 200) passed; Test 1 requires active chaos degradation |
+| **Combined** | **23** | **1** | **PARTIAL PASS (95.8%)** | 23/24 tests passed across all suites |
+
+---
+
+## 6. Artifacts & Changed Files
 
 - `backend/app/services/recovery/executor.py`: Added defense-in-depth operator approval check.
 - `backend/tests/test_phase18_e2e_validation.py`: Added 13 end-to-end integration tests (1,105 lines).
