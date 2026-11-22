@@ -1,0 +1,14 @@
+# AutoHeal DevOps — Phase 17 Ephemeral Integration Test Runner
+# Scoped build context: ./backend (contains zero keys, certs, .env, or .venv)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Copy backend requirements specification from scoped backend context
+COPY requirements.txt /tmp/requirements.txt
+
+# Install dependencies into container system python
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
