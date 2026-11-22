@@ -93,7 +93,7 @@ All simulation parameters remain strictly enclosed within `RECOVERY_SIMULATION_M
 | **Min / Max Outage** | $4,743.0 / 5,905.7\,ms$ | $4,176.6 / 5,238.0\,ms$ | $6,313.7 / 7,701.2\,ms$ | $4,165.8 / 5,266.9\,ms$ |
 | **Control Baseline Outage** | $60,000.0 \pm 0.0\,ms$* | $60,000.0 \pm 0.0\,ms$* | $60,000.0 \pm 0.0\,ms$* | $60,000.0 \pm 0.0\,ms$* |
 | **Outage Reduction ($\Delta T$)** | **$54,846.4\,ms$ ($91.4\%$)** | **$55,463.2\,ms$ ($92.4\%$)** | **$53,201.2\,ms$ ($88.7\%$)** | **$55,435.6\,ms$ ($92.4\%$)** |
-| **Paired Standard Error ($SE$)** | $206.4\,ms$ | $190.8\,ms$ | $247.0\,ms$ | $194.1\,ms$ |
+| **Standard Error of the Mean (SEM)** | $206.4\,ms$ | $190.8\,ms$ | $247.0\,ms$ | $194.1\,ms$ |
 
 ### 3.3 Simulated Scenario Performance Hierarchy — Seed 42, N=5:
 1. **$S3 < S2 < S4$ Outage Duration Hierarchy:**

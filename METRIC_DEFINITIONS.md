@@ -108,6 +108,8 @@ For any scalar metric sample $X = \{x_1, x_2, \dots, x_N\}$:
   $$\tilde{x} = \begin{cases} x_{(\frac{N+1}{2})} & \text{if } N \text{ is odd} \\ \frac{x_{(\frac{N}{2})} + x_{(\frac{N}{2} + 1)}}{2} & \text{if } N \text{ is even} \end{cases}$$
 - **Sample Standard Deviation ($s$):**
   $$s = \sqrt{\frac{1}{N-1} \sum_{i=1}^{N} (x_i - \bar{x})^2} \quad (\text{for } N \ge 2)$$
+- **Standard Error of the Mean ($SEM$):**
+  $$SEM = \frac{s}{\sqrt{N}}$$
 - **95th Percentile ($P_{95}$):**
   Nearest rank index $k = \lceil 0.95 \times N \rceil$ from ordered sample $X_{(1)} \le X_{(2)} \le \dots \le X_{(N)}$.
 
@@ -121,7 +123,7 @@ When comparing Recovery Enabled ($E$) against Recovery Disabled / Control ($D$):
   $$\Delta T = \bar{T}_{\text{outage}, D} - \bar{T}_{\text{outage}, E} \quad [ms]$$
 - **Relative MTTR Improvement Percentage ($I_{\text{MTTR}}$):**
   $$I_{\text{MTTR}} = \left( \frac{\bar{T}_{\text{outage}, D} - \bar{T}_{\text{outage}, E}}{\bar{T}_{\text{outage}, D}} \right) \times 100\%$$
-- **Standard Error of Difference ($SE_{\text{diff}}$):**
+- **Standard Error of the Mean ($SEM$):**
   In matched-seed paired trials where the control group is bounded by the fixed observation timeout ($s_D = 0.0$):
-  $$SE_{\text{diff}} = \frac{s_E}{\sqrt{N_E}}$$
-- **Descriptive Benchmark Threshold:** An improvement relative to the observation ceiling is declared descriptively significant if $N_E \ge 5$, $N_D \ge 5$, and $\Delta T > 2 \times SE_{\text{diff}}$. Because the control group is right-censored at $60,000\,ms$, parametric p-values from unconstrained survival models are not claimed.
+  $$SEM = \frac{s_E}{\sqrt{N_E}}$$
+- **Descriptive Benchmark Threshold:** An improvement relative to the observation ceiling is declared descriptively significant if $N_E \ge 5$, $N_D \ge 5$, and $\Delta T > 2 \times SEM$. Because the control group is right-censored at $60,000\,ms$, parametric p-values from unconstrained survival models are not claimed.

@@ -20,7 +20,7 @@ The objective of Phase 14.1 is to establish whether the reported benchmark resul
 1. **Git & CI Verification:** Head commit `1f2bca1` is verified on `origin/main` with working tree clean. GitHub Actions run `44942324103` completed with all 4 required CI jobs passing.
 2. **Deterministic Reproducibility:** Verified 100% bit-for-bit repeatability across all 8 scenarios when using identical pseudorandom seeds ($Seed = 42 + run\_number$). Matched-seed trials guarantee identical detection latencies and fault timing between recovery-enabled and control groups.
 3. **Critical MTTR & Outage Duration Audit:** The reported control MTTR of $60,000.0\,ms$ ($\sigma = 0.0\,ms$) is **Category B & D: A configured benchmark observation window timeout / right-censoring ceiling**, not an observed natural system recovery. Unmitigated outages do not resolve within the benchmark window. Presenting this timeout as an observed natural MTTR or claiming unadjusted parametric p-values against it was mathematically invalid.
-4. **Statistical Validity & P-Value Corrections:** Because the control group is right-censored with zero variance ($s_{\text{control}} = 0.0\,ms$), parametric Student's and Welch's t-tests are violated. Pseudo-p-value claims (`p < 0.01`, `p < 0.05`) have been removed and replaced with descriptive paired differences ($\Delta T = 54,939.2\,ms$, paired $SE = 303.4\,ms$, $N=5$), clearly qualifying the reduction relative to the 60s benchmark observation window ceiling.
+4. **Statistical Validity & P-Value Corrections:** Because the control group is right-censored with zero variance ($s_{\text{control}} = 0.0\,ms$), parametric Student's and Welch's t-tests are violated. Pseudo-p-value claims (`p < 0.01`, `p < 0.05`) have been removed and replaced with descriptive paired differences ($\Delta T = 54,939.2\,ms$, $SEM = 303.4\,ms$, $N=5$), clearly qualifying the reduction relative to the 60s benchmark observation window ceiling.
 5. **Evidence Tier Corrections:** Corrected misclassifications where simulated container restarts and calculated outage metrics were labeled as `MEASURED`. Scenario 1 is classified as `SYNTHETIC`, Scenarios 2–8 as `SIMULATED`, outage metrics as `CALCULATED`, and RBAC/approval tests as policy gate simulations.
 6. **Stale Run Protection:** Added immutability guards preventing re-execution of completed experiments, and automatic purging of orphaned runs from prior interrupted trials.
 
@@ -131,12 +131,12 @@ For $N = 5$ trials of Scenario 2 (`service_unavailable`):
 - Enabled Outages: $[4878.6, 4979.7, 4743.0, 5905.7, 5261.1]\,ms$
 - Paired Differences: $[55121.4, 55020.3, 55257.0, 54094.3, 54738.9]\,ms$
 - Mean Reduction: $\bar{D} = 54,846.4\,ms$ ($91.4\%$ reduction)
-- Standard Error: $SE = \frac{s_E}{\sqrt{N}} = \frac{461.43}{\sqrt{5}} = 206.4\,ms$
+- Standard Error of the Mean: $SEM = \frac{s_E}{\sqrt{N}} = \frac{461.43}{\sqrt{5}} = 206.4\,ms$
 
 ### 5.4 Audit Corrections:
 1. Removed all ungrounded "$p < 0.01$" and "$p < 0.05$" claims from `comparator.py`, `BENCHMARK_RESULTS.md`, and frontend mock strings.
 2. Formulated honest confidence notes:
-   > *"Descriptive benchmark: Autonomous recovery reduced mean outage duration by 91.4% (54,846 ms reduction across N=5 matched seeds, paired SE=206.4ms vs 60s observation window). Control baseline is right-censored at 60,000 ms; parametric p-values are not claimed."*
+   > *"Descriptive benchmark: Autonomous recovery reduced mean outage duration by 91.4% (54,846 ms reduction across N=5 matched seeds, SEM=206.4ms vs 60s observation window). Control baseline is right-censored at 60,000 ms; parametric p-values are not claimed."*
 
 ---
 

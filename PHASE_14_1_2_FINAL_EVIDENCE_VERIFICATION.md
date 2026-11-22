@@ -20,7 +20,7 @@ This audit report provides the final, narrowly scoped verification of the Phase 
    - *"Simulated Failure Condition"* replaces legacy physical failure terminology.
    - Explicit disclaimers ensuring no simulated container restart (`restart_container`), worker-pool recycling (`restart_pool`), or service scaling (`scale_service`) is described as actual host or infrastructure remediation.
 5. **Censored Control Qualification:** Unmitigated control durations ($60,000.0\,ms$, $\sigma = 0.0$) remain strictly qualified as right-censored observation-window bounds.
-6. **No Unsupported Claims:** Removal of all unadjusted p-value claims; descriptive comparisons supported by paired standard errors ($Diff > 2 \times SE$).
+6. **No Unsupported Claims:** Removal of all unadjusted p-value claims; descriptive comparisons supported by Standard Error of the Mean ($Diff > 2 \times SEM$).
 7. **Quality Gate Verification:** 100% green execution across unit tests (339 Pytest), TypeScript typecheck, ESLint, Next.js build, and GitHub Actions CI.
 
 ---
@@ -122,7 +122,7 @@ The sample statistics were independently recalculated using Python's standard `m
 - **Sample Mean:** $\bar{x} = \frac{1}{N} \sum_{i=1}^N x_i$
 - **Median:** $x_{(3)}$ for $N = 5$ (3rd ordered rank)
 - **Sample Standard Deviation ($s$):** $\sqrt{\frac{1}{N - 1} \sum_{i=1}^N (x_i - \bar{x})^2}$ with Bessel's correction ($N - 1 = 4$)
-- **Standard Error of the Mean ($SE$):** $SE = \frac{s}{\sqrt{N}} = \frac{s}{\sqrt{5}}$
+- **Standard Error of the Mean ($SEM$):** $SEM = \frac{s}{\sqrt{N}} = \frac{s}{\sqrt{5}}$
 - **Percentile 95 ($P_{95}$):** Nearest-rank ceiling $k = \lceil 0.95 \times 5 \rceil = 5 \implies x_{(5)}$ (maximum observation)
 - **Mean Outage Reduction ($\Delta T$):** $T_{\text{cutoff}} - \bar{x} = 60,000.0 - \bar{x}$
 - **Relative Outage Reduction:** $\frac{\Delta T}{60,000.0} \times 100\%$
@@ -141,7 +141,7 @@ The sample statistics were independently recalculated using Python's standard `m
 | **Control Baseline ($ms$)** | $60,000.0^*$ | $60,000.0^*$ | $60,000.0^*$ | $60,000.0^*$ | **EXACT MATCH** |
 | **Mean Reduction ($\Delta T$)** | **$54,846.4\,ms$** | **$55,463.2\,ms$** | **$53,201.2\,ms$** | **$55,435.6\,ms$** | **EXACT MATCH** |
 | **Relative Reduction** | **$91.4\%$** | **$92.4\%$** | **$88.7\%$** | **$92.4\%$** | **EXACT MATCH** |
-| **Paired Standard Error ($SE$)**| **$206.4\,ms$** | **$190.8\,ms$** | **$247.0\,ms$** | **$194.1\,ms$** | **EXACT MATCH** |
+| **Standard Error of the Mean (SEM)**| **$206.4\,ms$** | **$190.8\,ms$** | **$247.0\,ms$** | **$194.1\,ms$** | **EXACT MATCH** |
 
 ---
 
@@ -165,12 +165,12 @@ All documentation across the repository has been updated to adhere to strict sci
 2. **Invalidity of Standard Two-Sample t-tests:**
    - Comparing a variable distribution ($s_E > 0$) against a degenerate single-point distribution ($s_C = 0.0$) violates the variance-homogeneity assumptions of Student's and Welch's t-tests.
    - All legacy p-value claims (e.g. "$p < 0.01$") have been eliminated.
-3. **Paired Standard Error Formulation:**
-   - Because each trial pair shares identical pseudorandom seeds ($Seed_i = 42 + i$), the comparison is evaluated as a paired difference:
+3. **Standard Error of the Mean Formulation:**
+   - Because each trial pair shares identical pseudorandom seeds ($Seed_i = 42 + i$), the comparison is evaluated as a paired difference against the observation ceiling:
      $$D_i = 60,000.0 - T_{E, i}$$
      $$\bar{D} = 60,000.0 - \bar{T}_E$$
-     $$SE(\bar{D}) = \frac{s_E}{\sqrt{N}}$$
-   - In all scenarios, $\Delta T > 53,000\,ms$, which exceeds the paired standard error by more than $180\times$ ($\Delta T \gg 2 \times SE$). This establishes an undeniable descriptive improvement relative to the 60-second observation ceiling.
+     $$SEM = \frac{s_E}{\sqrt{N}}$$
+   - In all scenarios, $\Delta T > 53,000\,ms$, which exceeds the Standard Error of the Mean by more than $180\times$ ($\Delta T \gg 2 \times SEM$). This establishes an undeniable descriptive improvement relative to the 60-second observation ceiling.
 
 ---
 

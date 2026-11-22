@@ -134,7 +134,7 @@ Using sample standard deviation ($N - 1 = 4$ ddof) and nearest-rank $P_{95}$:
 | **$P_{95}$ Outage** | $5,905.7\,ms$ | $5,238.0\,ms$ | $7,701.2\,ms$ | $5,266.9\,ms$ |
 | **Control Baseline** | $60,000.0 \pm 0.0\,ms$* | $60,000.0 \pm 0.0\,ms$* | $60,000.0 \pm 0.0\,ms$* | $60,000.0 \pm 0.0\,ms$* |
 | **Mean Reduction ($\Delta T$)** | **$54,846.4\,ms$ ($91.4\%$)** | **$55,463.2\,ms$ ($92.4\%$)** | **$53,201.2\,ms$ ($88.7\%$)** | **$55,435.6\,ms$ ($92.4\%$)** |
-| **Paired Standard Error ($SE$)** | $206.4\,ms$ | $190.8\,ms$ | $247.0\,ms$ | $194.1\,ms$ |
+| **Standard Error of the Mean (SEM)** | $206.4\,ms$ | $190.8\,ms$ | $247.0\,ms$ | $194.1\,ms$ |
 
 *\* Control baseline is right-censored at the 60,000 ms observation window ceiling.*
 

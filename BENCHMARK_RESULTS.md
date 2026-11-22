@@ -19,10 +19,10 @@ Each scenario was evaluated across multiple seed-isolated runs ($N=5$, base seed
 | Scenario ID & Name | Recovery Enabled Mean MTTR | Control Baseline (60s Observation Window Cutoff) | Outage Reduction ($\Delta T$) | Outage Reduction (%) | Statistical Qualification & Significance | Evidence Tier |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **S1: Healthy Baseline** | $0.0 \pm 0.0\,ms$ | $0.0 \pm 0.0\,ms$ | $0.0\,ms$ | Baseline | N/A (Zero-variance baseline) | `SYNTHETIC` |
-| **S2: 503 Outage** | $5,153.6 \pm 461.4\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$54,846.4\,ms$** | **$91.4\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 206.4\,ms$) | `SIMULATED` |
-| **S3: High Error Rate** | $4,536.8 \pm 426.7\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$55,463.2\,ms$** | **$92.4\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 190.8\,ms$) | `SIMULATED` |
-| **S4: Resource Exhaustion** | $6,798.8 \pm 552.4\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$53,201.2\,ms$** | **$88.7\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 247.0\,ms$) | `SIMULATED` |
-| **S5: Repeated Alerts** | $4,564.4 \pm 433.9\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$55,435.6\,ms$** | **$92.4\%$** | Descriptive ($\Delta T > 2 \times SE$, paired $SE = 194.1\,ms$) | `SIMULATED` |
+| **S2: 503 Outage** | $5,153.6 \pm 461.4\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$54,846.4\,ms$** | **$91.4\%$** | Descriptive ($\Delta T > 2 \times SEM$, $SEM = 206.4\,ms$) | `SIMULATED` |
+| **S3: High Error Rate** | $4,536.8 \pm 426.7\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$55,463.2\,ms$** | **$92.4\%$** | Descriptive ($\Delta T > 2 \times SEM$, $SEM = 190.8\,ms$) | `SIMULATED` |
+| **S4: Resource Exhaustion** | $6,798.8 \pm 552.4\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$53,201.2\,ms$** | **$88.7\%$** | Descriptive ($\Delta T > 2 \times SEM$, $SEM = 247.0\,ms$) | `SIMULATED` |
+| **S5: Repeated Alerts** | $4,564.4 \pm 433.9\,ms$ | $60,000.0 \pm 0.0\,ms$* | **$55,435.6\,ms$** | **$92.4\%$** | Descriptive ($\Delta T > 2 \times SEM$, $SEM = 194.1\,ms$) | `SIMULATED` |
 | **S6: Verification Failure** | $60,000.0 \pm 0.0\,ms$* (Escalated) | $60,000.0 \pm 0.0\,ms$* | $0.0\,ms$ | Escalation Gate | 100% Escalated to Human On-Call | `SIMULATED` |
 | **S7: Unauthorized Recovery**| Blocked (HTTP 403) | N/A | Security Gate | 100% RBAC Gate | Zero Mutation Allowed | `SIMULATED` |
 | **S8: Unapproved Recovery** | Held in Pending | N/A | Sign-off Gate | 100% Policy Gate| Awaiting Human Approval Token | `SIMULATED` |
@@ -76,7 +76,7 @@ where:
 - **Total Outage Duration Distribution:**
   - Recovery Enabled: Min: $4,743.0\,ms$ · Max: $5,905.7\,ms$ · Mean: **$5,153.6\,ms$** · Median: $4,979.7\,ms$ · $P_{95} = 5,905.7\,ms$ · $\sigma = \pm 461.4\,ms$
   - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
-- **Net Improvement:** **$91.4\%$ Outage Reduction** ($54,846.4\,ms$ saved relative to the 60s observation window; paired $SE = 206.4\,ms$).
+- **Net Improvement:** **$91.4\%$ Outage Reduction** ($54,846.4\,ms$ saved relative to the 60s observation window; Standard Error of the Mean, $SEM = 206.4\,ms$).
 - **Evidence Classification:** `SIMULATED` / `CALCULATED`
 
 ### Scenario 3: High Error Rate Surge (`high_error_rate`)
@@ -103,7 +103,7 @@ where:
 - **Total Outage Duration Distribution:**
   - Recovery Enabled: Min: $4,176.6\,ms$ · Max: $5,238.0\,ms$ · Mean: **$4,536.8\,ms$** · Median: $4,394.4\,ms$ · $P_{95} = 5,238.0\,ms$ · $\sigma = \pm 426.7\,ms$
   - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
-- **Net Improvement:** **$92.4\%$ Outage Reduction** ($55,463.2\,ms$ saved relative to the 60s observation window; paired $SE = 190.8\,ms$).
+- **Net Improvement:** **$92.4\%$ Outage Reduction** ($55,463.2\,ms$ saved relative to the 60s observation window; Standard Error of the Mean, $SEM = 190.8\,ms$).
 - **Evidence Classification:** `SIMULATED` / `CALCULATED`
 
 ### Scenario 4: Resource Exhaustion (`resource_exhaustion`)
@@ -130,12 +130,7 @@ where:
 - **Total Outage Duration Distribution:**
   - Recovery Enabled: Min: $6,313.7\,ms$ · Max: $7,701.2\,ms$ · Mean: **$6,798.8\,ms$** · Median: $6,596.7\,ms$ · $P_{95} = 7,701.2\,ms$ · $\sigma = \pm 552.4\,ms$
   - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
-- **Net Improvement:** **$88.7\%$ Outage Reduction** ($53,201.2\,ms$ saved relative to the 60s observation window; paired $SE = 247.0\,ms$).
-- **Evidence Classification:** `SIMULATED` / `CALCULATED`
-- **Total Outage Duration:**
-  - Recovery Enabled: Min: $6,313.7\,ms$ · Max: $7,701.2\,ms$ · Mean: **$6,798.8\,ms$** · Median: $6,596.7\,ms$ · $P_{95} = 7,701.2\,ms$ · $\sigma = \pm 552.4\,ms$
-  - Control Baseline: $60,000.0 \pm 0.0\,ms$ (Right-censored observation ceiling)
-- **Net Improvement:** **$88.7\%$ Outage Reduction** ($53,201.2\,ms$ saved relative to the 60s observation window; paired $SE = 247.0\,ms$).
+- **Net Improvement:** **$88.7\%$ Outage Reduction** ($53,201.2\,ms$ saved relative to the 60s observation window; Standard Error of the Mean, $SEM = 247.0\,ms$).
 - **Evidence Classification:** `SIMULATED` / `CALCULATED`
 
 ### Scenario 5: Repeated Alerts Flapping (`repeated_alerts`)
@@ -179,7 +174,7 @@ where:
 
 ### 2. Statistical Test Applicability
 - **Violation of Parametric Assumptions:** Classical Student's t-test and Welch's t-test assume continuous, non-degenerate distributions. Comparing a variable sample ($s_E > 0$) against a degenerate constant ($s_C = 0.0\,ms$) violates these assumptions.
-- **Removal of Unadjusted P-Values:** Prior informal notations of "$p < 0.01$" or "$p < 0.05$" have been audited and replaced with exact descriptive statistics and paired standard errors ($SE = s_E / \sqrt{N}$).
+- **Removal of Unadjusted P-Values:** Prior informal notations of "$p < 0.01$" or "$p < 0.05$" have been audited and replaced with exact descriptive statistics and Standard Error of the Mean ($SEM = s_E / \sqrt{N}$).
 - **Paired Matched-Seed Analysis:** Because runs share identical pseudorandom seeds ($Seed_i = 42 + i$), the comparison is a paired difference against the observation window ceiling. The effect size ($\Delta T > 53,000\,ms$) exceeds the standard error by over $180\times$, establishing an indisputable descriptive reduction relative to the 60s benchmark cap.
 
 ### 3. Investigation of the 200 ms Dispatch Overhead
