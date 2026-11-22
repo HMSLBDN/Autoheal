@@ -31,7 +31,6 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
       - /var/run:rw,noexec,nosuid,size=4m
-      - /var/log/nginx:rw,noexec,nosuid,size=16m
     volumes:
       # Docker socket mounted EXCLUSIVELY here; no other container receives socket access
       - /var/run/docker.sock:/var/run/docker.sock:rw
