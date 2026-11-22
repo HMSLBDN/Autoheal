@@ -78,6 +78,12 @@ class RecoveryExecutor:
         if recovery.status not in ("approved", "pending_approval"):
             raise ValueError(f"Recovery '{recovery_id}' cannot be executed from status '{recovery.status}'.")
 
+        # 1b. Strict Operator Approval Governance Check (Defense-in-Depth)
+        if recovery.approval_required and recovery.status != "approved":
+            raise ValueError(
+                f"Recovery '{recovery_id}' requires explicit operator approval before execution (current status: '{recovery.status}')."
+            )
+
         # 2. Strict allowlist validation
         if not is_action_allowed(recovery.action):
             raise ValueError(f"Security violation: Action '{recovery.action}' is not in the approved recovery allowlist.")

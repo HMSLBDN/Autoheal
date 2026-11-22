@@ -114,9 +114,10 @@ async def test_recovery_idempotency_performance(db_session, seed_data, monkeypat
 
     rec_pending = seed_data["rec_pending"]
     rec_pending.action = "restart_service"
+    rec_pending.status = "approved"
     await db_session.commit()
 
-    # 1. First execution: Transitions from pending_approval to completed
+    # 1. First execution: Transitions from approved to completed
     res1 = await _run_recovery(rec_pending.id, simulated_healthy=True)
     assert res1["status"] == "success"
     assert res1["recovery_status"] in ("completed", "verified")
