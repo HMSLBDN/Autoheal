@@ -23,6 +23,7 @@ from app.services.agent.security import (
 from app.services.agent.interface import InfrastructureAgentClient
 from app.services.agent.simulator import SimulatedAgentClient
 from app.services.agent.client import RemoteAgentClient
+from app.services.agent.docker_client import RestrictedDockerAgentClient
 
 __all__ = [
     "ActionRequest",
@@ -37,4 +38,5 @@ __all__ = [
     "InfrastructureAgentClient",
     "SimulatedAgentClient",
     "RemoteAgentClient",
+    "RestrictedDockerAgentClient",
 ]

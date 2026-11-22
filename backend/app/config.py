@@ -220,6 +220,24 @@ class Settings(BaseSettings):
         description="Execute simulated safe recoveries instead of modifying real infrastructure"
     )
 
+    # Controlled Restricted Docker Agent (Phase 16)
+    RESTRICTED_DOCKER_AGENT_ENABLED: bool = Field(
+        default=False,
+        description="Explicit opt-in to enable communication with the restricted Docker agent for designated test containers."
+    )
+    DOCKER_AGENT_URL: str = Field(
+        default="http://localhost:8091",
+        description="Base URL of the standalone restricted Docker recovery agent."
+    )
+    DOCKER_AGENT_SECRET_KEY: str = Field(
+        default="autoheal_docker_agent_secret_32chars_min",
+        description="Shared secret for signing requests dispatched to the restricted Docker recovery agent."
+    )
+    DOCKER_AGENT_APPROVED_CONTAINERS: List[str] = Field(
+        default_factory=lambda: ["autoheal_test_service", "test-service"],
+        description="Strict allowlist of container names permitted for controlled recovery operations."
+    )
+
     @model_validator(mode="after")
     def validate_security_settings(self) -> "Settings":
         if self.APP_ENV in ("production", "staging"):

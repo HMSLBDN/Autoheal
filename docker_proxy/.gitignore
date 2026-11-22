@@ -1,0 +1,4 @@
+# Ignore local private keys and certs
+certs/*.key
+certs/*.crt
+certs/*.pem

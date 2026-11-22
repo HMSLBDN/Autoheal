@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import get_settings
 from app.models.audit import AuditLog
 from app.models.incident import Incident, IncidentEvent
 from app.models.recovery import RecoveryAction, RecoveryResult
@@ -21,6 +22,7 @@ from app.services.agent import (
     ActionRequest,
     InfrastructureAgentClient,
     SimulatedAgentClient,
+    RestrictedDockerAgentClient,
 )
 from app.services.events import event_broadcaster
 from app.services.recovery.orchestrator import RecoveryState, orchestrator
@@ -40,7 +42,13 @@ class RecoveryExecutor:
 
     def __init__(self, agent_client: Optional[InfrastructureAgentClient] = None):
         self.verifier = PostRecoveryVerifier()
-        self.agent_client = agent_client or SimulatedAgentClient()
+        settings = get_settings()
+        if agent_client is not None:
+            self.agent_client = agent_client
+        elif not settings.RECOVERY_SIMULATION_MODE and getattr(settings, "RESTRICTED_DOCKER_AGENT_ENABLED", False):
+            self.agent_client = RestrictedDockerAgentClient()
+        else:
+            self.agent_client = SimulatedAgentClient()
 
     async def execute_recovery(
         self,
@@ -101,6 +109,17 @@ class RecoveryExecutor:
         if not policy_eval.allowed:
             raise ValueError(f"Policy violation: {policy_eval.reason}")
 
+        # 4b. Container Allowlist Enforcement for Real Infrastructure Mode
+        settings = get_settings()
+        if not settings.RECOVERY_SIMULATION_MODE and getattr(settings, "RESTRICTED_DOCKER_AGENT_ENABLED", False):
+            target_name = service.name or recovery.service_name
+            approved_list = getattr(settings, "DOCKER_AGENT_APPROVED_CONTAINERS", [])
+            if target_name not in approved_list:
+                raise ValueError(
+                    f"Security violation: Target service '{target_name}' is not in the approved "
+                    f"Docker agent container allowlist. Permitted: {approved_list}"
+                )
+
         # 5. Transition to 'executing' (canonical) / 'running' (frontend)
         start_time = datetime.now(timezone.utc)
         await orchestrator.transition(
@@ -110,7 +129,13 @@ class RecoveryExecutor:
             reason=f"Executing action '{action_def.display_name if action_def else recovery.action}'.",
             organization_id=service.organization_id,
         )
-        recovery.duration_seconds = 12
+        is_real_exec = (
+            not settings.RECOVERY_SIMULATION_MODE
+            and getattr(settings, "RESTRICTED_DOCKER_AGENT_ENABLED", False)
+        )
+        mode_str = "REAL" if is_real_exec else "SIMULATED"
+        recovery.execution_mode = mode_str
+        recovery.evidence_classification = "SIMULATED" if not is_real_exec else "DOCKER_API_ACCEPTED"
         await db.commit()
 
         # 6. Execute safe action via restricted infrastructure agent
@@ -129,6 +154,7 @@ class RecoveryExecutor:
         # 6a. Check if restricted agent execution failed or was rejected
         if agent_res.status != ActionExecutionStatus.SUCCESS or agent_res.exit_code != 0:
             now = datetime.now(timezone.utc)
+            duration_s = max(1, int((now - start_time).total_seconds()))
             fail_summary = (
                 f"Execution failed for action '{action_def.display_name if action_def else recovery.action}' "
                 f"on service '{recovery.service_name}'. Agent returned status '{agent_res.status.value}' "
@@ -136,11 +162,15 @@ class RecoveryExecutor:
             )
             recovery.status = "failed"
             recovery.verification = "failed"
+            recovery.duration_seconds = duration_s
+            recovery.execution_mode = mode_str
+            recovery.evidence_classification = "VERIFICATION_FAILED"
             diag_output = (
                 f"[AGENT_EXECUTION_FAILURE]\n"
                 f"TIMESTAMP: {now.isoformat()}\n"
                 f"ACTION: {recovery.action}\n"
                 f"SERVICE: {recovery.service_name}\n"
+                f"MODE: {mode_str}\n"
                 f"AGENT_ID: {agent_res.agent_id}\n"
                 f"STATUS: {agent_res.status.value}\n"
                 f"EXIT_CODE: {agent_res.exit_code}\n"
@@ -152,6 +182,8 @@ class RecoveryExecutor:
                 recovery.result.verified = False
                 recovery.result.completed_at = now
                 recovery.result.diagnostic_output = diag_output
+                recovery.result.execution_mode = mode_str
+                recovery.result.evidence_classification = "VERIFICATION_FAILED"
             else:
                 recovery.result = RecoveryResult(
                     id=uuid.uuid4(),
@@ -160,6 +192,8 @@ class RecoveryExecutor:
                     summary=fail_summary,
                     completed_at=now,
                     diagnostic_output=diag_output,
+                    execution_mode=mode_str,
+                    evidence_classification="VERIFICATION_FAILED",
                 )
 
             # Update incident state to reflect failure and prevent resolution
@@ -182,7 +216,7 @@ class RecoveryExecutor:
                 action="recovery_failed",
                 resource_type="recovery_action",
                 resource_id=recovery.id,
-                details=f"Execution of '{recovery.action}' failed for '{recovery.service_name}'. Status: {agent_res.status.value}, exit_code: {agent_res.exit_code}.",
+                details=f"Execution of '{recovery.action}' failed for '{recovery.service_name}'. mode={mode_str}, status={agent_res.status.value}, exit_code={agent_res.exit_code}.",
             ))
             await db.commit()
 
@@ -193,6 +227,8 @@ class RecoveryExecutor:
                     "status": recovery.status,
                     "verification": recovery.verification,
                     "durationSeconds": recovery.duration_seconds,
+                    "executionMode": recovery.execution_mode,
+                    "evidenceClassification": recovery.evidence_classification,
                 })
                 await event_broadcaster.broadcast(incident.organization_id, "incident_updated", {
                     "id": incident.id,
@@ -201,18 +237,23 @@ class RecoveryExecutor:
                 })
             return recovery
 
+        initial_classification = "DOCKER_API_ACCEPTED" if is_real_exec else "SIMULATED"
+        recovery.execution_mode = mode_str
+        recovery.evidence_classification = initial_classification
+
         exec_summary = (
-            f"Successfully executed {action_def.display_name if action_def else recovery.action} "
-            f"via restricted agent for service '{recovery.service_name}'. Containers cycled and traffic restored."
+            f"Successfully dispatched {action_def.display_name if action_def else recovery.action} "
+            f"via restricted agent for service '{recovery.service_name}' ({mode_str} mode). Awaiting health verification."
         )
 
-        recovery.status = "completed"
         now = datetime.now(timezone.utc)
         diag_output = (
             f"[AGENT_EXECUTION_RECEIPT]\n"
             f"TIMESTAMP: {now.isoformat()}\n"
             f"ACTION: {recovery.action}\n"
             f"SERVICE: {recovery.service_name}\n"
+            f"MODE: {mode_str}\n"
+            f"CLASSIFICATION: {initial_classification}\n"
             f"AGENT_ID: {agent_res.agent_id}\n"
             f"EXIT_CODE: {agent_res.exit_code}\n"
             f"EVIDENCE_HASH: {agent_res.evidence_receipt_hash}\n"
@@ -223,6 +264,8 @@ class RecoveryExecutor:
             recovery.result.summary = exec_summary
             recovery.result.completed_at = now
             recovery.result.diagnostic_output = diag_output
+            recovery.result.execution_mode = mode_str
+            recovery.result.evidence_classification = initial_classification
         else:
             recovery.result = RecoveryResult(
                 id=uuid.uuid4(),
@@ -231,6 +274,8 @@ class RecoveryExecutor:
                 summary=exec_summary,
                 completed_at=now,
                 diagnostic_output=diag_output,
+                execution_mode=mode_str,
+                evidence_classification=initial_classification,
             )
 
         db.add(AuditLog(
@@ -238,7 +283,7 @@ class RecoveryExecutor:
             action="recovery_executed",
             resource_type="recovery_action",
             resource_id=recovery.id,
-            details=f"Controlled execution of '{recovery.action}' completed for '{recovery.service_name}'.",
+            details=f"Controlled execution of '{recovery.action}' completed for '{recovery.service_name}'. mode={mode_str}, classification={initial_classification}.",
         ))
         await db.commit()
 
@@ -253,8 +298,16 @@ class RecoveryExecutor:
             incident=incident,
             service=service,
             simulated_healthy=simulated_outcome_healthy,
+            execution_mode=mode_str,
+            evidence_classification=None,
         )
+        duration_s = max(1, int((datetime.now(timezone.utc) - start_time).total_seconds()))
+        recovery.duration_seconds = duration_s
+
         recovery.status = "completed"
+        if not verified:
+            recovery.verification = "failed"
+
         await db.commit()
 
         # Reload with eager-loaded result relationship
@@ -272,6 +325,8 @@ class RecoveryExecutor:
             "status": final_action.status,
             "verification": final_action.verification,
             "durationSeconds": final_action.duration_seconds,
+            "executionMode": final_action.execution_mode,
+            "evidenceClassification": final_action.evidence_classification,
         })
         await event_broadcaster.broadcast(incident.organization_id, "incident_updated", {
             "id": incident.id,

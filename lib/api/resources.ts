@@ -113,6 +113,12 @@ function validateRecovery(value: unknown): RecoveryAction {
   if (!['pending_approval', 'approved', 'running', 'completed', 'failed', 'rejected'].includes(action.status)) throw new ApiError('The recovery response contains an unsupported status.', 502)
   if (!['pending', 'passed', 'failed', 'not_started'].includes(action.verification)) throw new ApiError('The recovery response contains an unsupported verification state.', 502)
   if (action.durationSeconds !== undefined && (typeof action.durationSeconds !== 'number' || !Number.isFinite(action.durationSeconds))) throw new ApiError('The recovery response contains an invalid duration.', 502)
+  if (action.executionMode !== undefined && !['SIMULATED', 'REAL'].includes(action.executionMode)) {
+    throw new ApiError('The recovery response contains an unsupported execution mode.', 502)
+  }
+  if (action.evidenceClassification !== undefined && !['SIMULATED', 'DOCKER_API_ACCEPTED', 'HEALTH_VERIFIED', 'VERIFICATION_FAILED'].includes(action.evidenceClassification)) {
+    throw new ApiError('The recovery response contains an unsupported evidence classification.', 502)
+  }
   return action
 }
 

@@ -1,0 +1,99 @@
+version: '3.8'
+
+# AutoHeal DevOps — Dedicated Isolated Test Infrastructure with Hardened L7 NGINX Proxy
+# The host Docker socket is mounted EXCLUSIVELY into autoheal_socket_proxy (unprivileged UID 101, GID 0).
+# The backend and Docker Agent have ZERO direct Docker socket access.
+# Agent communicates with Docker daemon strictly via mTLS through autoheal_socket_proxy.
+
+networks:
+  autoheal_test_network:
+    driver: bridge
+    name: autoheal_test_network
+    internal: true # Air-gapped test network; zero external ingress/egress
+
+services:
+  # ----------------------------------------------------------------------------
+  # Hardened L7 NGINX Docker Micro-Proxy
+  # ----------------------------------------------------------------------------
+  autoheal_socket_proxy:
+    image: nginx:1.25-alpine
+    container_name: autoheal_socket_proxy
+    hostname: autoheal_socket_proxy
+    restart: unless-stopped
+    user: "101:101" # Unprivileged nginx user and group
+    group_add:
+      - "0"         # Supplementary group 0 (root group owning mode 0660 socket on WSL2)
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/run:rw,noexec,nosuid,size=4m
+      - /var/log/nginx:rw,noexec,nosuid,size=16m
+    volumes:
+      # Docker socket mounted EXCLUSIVELY here; no other container receives socket access
+      - /var/run/docker.sock:/var/run/docker.sock:rw
+      - ./docker_proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker_proxy/certs:/etc/nginx/certs:ro
+    networks:
+      - autoheal_test_network
+    expose:
+      - "8443"
+
+  # ----------------------------------------------------------------------------
+  # Dedicated Test Service
+  # ----------------------------------------------------------------------------
+  autoheal_test_service:
+    build:
+      context: .
+      dockerfile: test_environment/Dockerfile.test_service
+    container_name: autoheal_test_service
+    hostname: autoheal_test_service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - autoheal_test_network
+    expose:
+      - "8080"
+
+  # ----------------------------------------------------------------------------
+  # AutoHeal Restricted Docker Agent (Zero Docker Socket Access)
+  # ----------------------------------------------------------------------------
+  autoheal_docker_agent:
+    build:
+      context: .
+      dockerfile: test_environment/Dockerfile.agent
+    container_name: autoheal_docker_agent
+    hostname: autoheal_docker_agent
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      - DOCKER_AGENT_ID=docker-agent-restricted-01
+      - DOCKER_AGENT_PORT=8091
+      - DOCKER_AGENT_HOST=0.0.0.0
+      - RECOVERY_SIMULATION_MODE=true
+      # Mandatory secure secret: fails startup if unset or predictable
+      - DOCKER_AGENT_SECRET_KEY=${DOCKER_AGENT_SECRET_KEY:?DOCKER_AGENT_SECRET_KEY must be set in environment and have at least 32 characters}
+      - DOCKER_AGENT_APPROVED_CONTAINERS=autoheal_test_service,test-service
+      - DOCKER_HOST=https://autoheal_socket_proxy:8443
+      - DOCKER_TLS_VERIFY=1
+      - DOCKER_CERT_PATH=/etc/ssl/certs/autoheal
+      - TEST_SERVICE_HEALTH_URL=http://autoheal_test_service:8080/health
+    volumes:
+      # mTLS client certificates; ZERO Docker socket mounts
+      - ./docker_proxy/certs/ca.crt:/etc/ssl/certs/autoheal/ca.crt:ro
+      - ./docker_proxy/certs/agent.crt:/etc/ssl/certs/autoheal/agent.crt:ro
+      - ./docker_proxy/certs/agent.key:/etc/ssl/certs/autoheal/agent.key:ro
+    depends_on:
+      - autoheal_socket_proxy
+      - autoheal_test_service
+    networks:
+      - autoheal_test_network
+    expose:
+      - "8091"

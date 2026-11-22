@@ -73,10 +73,26 @@ export interface Incident {
   events: IncidentEvent[]
 }
 
+export type ExecutionMode = 'SIMULATED' | 'REAL'
+
+export type EvidenceClassification =
+  | 'MEASURED'
+  | 'CALCULATED'
+  | 'SYNTHETIC'
+  | 'SIMULATED'
+  | 'DOCKER_API_ACCEPTED'
+  | 'HEALTH_VERIFIED'
+  | 'VERIFICATION_FAILED'
+
+export type RecoveryEvidenceClassification = EvidenceClassification
+
 export interface RecoveryResult {
   verified: boolean
   summary: string
   completedAt: string
+  executionMode?: ExecutionMode
+  evidenceClassification?: EvidenceClassification
+  diagnosticOutput?: string
 }
 
 export interface RecoveryAction {
@@ -90,6 +106,8 @@ export interface RecoveryAction {
   requestedAt: string
   durationSeconds?: number
   verification: 'pending' | 'passed' | 'failed' | 'not_started'
+  executionMode?: ExecutionMode
+  evidenceClassification?: EvidenceClassification
   result?: RecoveryResult
 }
 
@@ -665,7 +683,6 @@ export type ScenarioType =
   | 'unapproved_recovery'
 
 export type ExperimentStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
-export type EvidenceClassification = 'MEASURED' | 'CALCULATED' | 'SYNTHETIC' | 'SIMULATED'
 
 export interface MetricDistribution {
   min: number | null

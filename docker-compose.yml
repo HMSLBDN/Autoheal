@@ -224,12 +224,11 @@ services:
     container_name: autoheal_cadvisor
     restart: unless-stopped
     command:
-      - --docker_only=true
       - --housekeeping_interval=15s
       - --disable_metrics=disk,diskIO,hugetlb,referenced_memory,resctrl,perf_event
+      - --raw_cgroup_prefix_whitelist=/
     volumes:
       - /:/rootfs:ro
-      - /var/run:/var/run:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
     ports:

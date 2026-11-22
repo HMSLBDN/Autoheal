@@ -82,6 +82,16 @@ class RecoveryAction(Base, TimestampMixin):
         default="pending",
         nullable=False,
     )  # pending, passed, failed, not_started
+    execution_mode: Mapped[str] = mapped_column(
+        String(50),
+        default="SIMULATED",
+        nullable=False,
+    )  # SIMULATED, REAL
+    evidence_classification: Mapped[str] = mapped_column(
+        String(50),
+        default="SIMULATED",
+        nullable=False,
+    )  # SIMULATED, DOCKER_API_ACCEPTED, HEALTH_VERIFIED, VERIFICATION_FAILED
 
     # Relationships
     incident: Mapped["Incident"] = relationship(
@@ -140,6 +150,16 @@ class RecoveryResult(Base):
         Text,
         nullable=True,
     )
+    execution_mode: Mapped[str] = mapped_column(
+        String(50),
+        default="SIMULATED",
+        nullable=False,
+    )  # SIMULATED, REAL
+    evidence_classification: Mapped[str] = mapped_column(
+        String(50),
+        default="SIMULATED",
+        nullable=False,
+    )  # SIMULATED, DOCKER_API_ACCEPTED, HEALTH_VERIFIED, VERIFICATION_FAILED
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=utc_now,

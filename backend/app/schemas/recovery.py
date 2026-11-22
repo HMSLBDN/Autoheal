@@ -24,6 +24,9 @@ class RecoveryResultResponse(BaseModel):
     verified: bool
     summary: str
     completed_at: str = Field(..., serialization_alias="completedAt")
+    execution_mode: Optional[str] = Field("SIMULATED", serialization_alias="executionMode")
+    evidence_classification: Optional[str] = Field("SIMULATED", serialization_alias="evidenceClassification")
+    diagnostic_output: Optional[str] = Field(None, serialization_alias="diagnosticOutput")
 
 
 class RecoveryActionResponse(BaseModel):
@@ -40,6 +43,8 @@ class RecoveryActionResponse(BaseModel):
     requested_at: str = Field(..., serialization_alias="requestedAt")
     duration_seconds: Optional[int] = Field(None, serialization_alias="durationSeconds")
     verification: VerificationType
+    execution_mode: Optional[str] = Field("SIMULATED", serialization_alias="executionMode")
+    evidence_classification: Optional[str] = Field("SIMULATED", serialization_alias="evidenceClassification")
     result: Optional[RecoveryResultResponse] = None
 
 

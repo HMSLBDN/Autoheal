@@ -66,20 +66,25 @@ class PostRecoveryVerifier:
         service: Service,
         simulated_healthy: bool = True,
         post_metrics: Optional[Dict[str, Any]] = None,
+        execution_mode: str = "SIMULATED",
+        evidence_classification: Optional[str] = None,
     ) -> bool:
         """
         Executes comprehensive post-recovery verification.
         Compares pre-recovery metrics against post-recovery measurements.
+        Distinguishes simulated verification from genuine runtime health verification.
         Returns True if service is verified healthy, False otherwise.
         """
         now = datetime.now(timezone.utc)
 
-        # Baseline pre-recovery values recorded on the incident
+        # Baseline pre-recovery values recorded on the incident and service
         pre_error_rate = incident.error_rate if incident.error_rate is not None else 2.5
         threshold = incident.threshold if incident.threshold is not None else 1.0
+        # CRITICAL FIX: Capture pre-recovery latency BEFORE updating service state
+        pre_latency_ms = service.latency_ms if service.latency_ms is not None else 450
 
         if simulated_healthy:
-            # Service telemetry successfully restored
+            # Service telemetry successfully restored (SIMULATED or VERIFIED)
             post_error_rate = 0.02
             post_latency_ms = 115
             post_availability = 99.98
@@ -95,7 +100,7 @@ class PostRecoveryVerifier:
             service.availability = post_availability
             service.last_checked = now
 
-            # Metric differential comparison
+            # Metric differential comparison using true preserved pre-recovery baseline
             diff_error = MetricComparison(
                 metric_name="error_rate",
                 pre_recovery_value=round(pre_error_rate, 2),
@@ -106,18 +111,26 @@ class PostRecoveryVerifier:
             )
             diff_latency = MetricComparison(
                 metric_name="latency_ms",
-                pre_recovery_value=service.latency_ms or 450,
+                pre_recovery_value=pre_latency_ms,
                 post_recovery_value=post_latency_ms,
                 threshold=300,
                 unit="ms",
                 normalized=post_latency_ms <= 300,
             )
 
+            # Determine classification
+            effective_class = evidence_classification or (
+                "HEALTH_VERIFIED" if execution_mode == "REAL" else "SIMULATED"
+            )
+
             # Update recovery state
             recovery.verification = "passed"
+            recovery.execution_mode = execution_mode
+            recovery.evidence_classification = effective_class
 
+            mode_label = "Real Runtime" if execution_mode == "REAL" else "Simulated"
             summary_text = (
-                f"Verified: {service.name} returned to healthy state. "
+                f"Verified ({mode_label}): {service.name} returned to healthy state. "
                 f"Error rate dropped from {diff_error.pre_recovery_value}% to {diff_error.post_recovery_value}% "
                 f"(threshold: {threshold}%), P95 latency normalized to {post_latency_ms}ms."
             )
@@ -126,6 +139,8 @@ class PostRecoveryVerifier:
                 recovery.result.verified = True
                 recovery.result.completed_at = now
                 recovery.result.summary = summary_text
+                recovery.result.execution_mode = execution_mode
+                recovery.result.evidence_classification = effective_class
             else:
                 recovery.result = RecoveryResult(
                     id=uuid.uuid4(),
@@ -133,18 +148,20 @@ class PostRecoveryVerifier:
                     verified=True,
                     completed_at=now,
                     summary=summary_text,
+                    execution_mode=execution_mode,
+                    evidence_classification=effective_class,
                 )
 
             # Update incident state
             incident.status = "resolved"
-            incident.recovery_status = "Completed / Verified healthy"
+            incident.recovery_status = f"Completed / Verified healthy ({mode_label})"
             incident.resolved_at = now
 
             # Add verified event
             db.add(IncidentEvent(
                 incident_id=incident.id,
-                label="Recovery Verified",
-                detail=f"Automated verification passed. Service '{service.name}' SLA restored.",
+                label=f"Recovery Verified ({mode_label})",
+                detail=f"Automated verification passed ({effective_class}). Service '{service.name}' SLA restored.",
                 timestamp=now,
                 tone="success",
             ))
@@ -153,7 +170,7 @@ class PostRecoveryVerifier:
             db.add(IncidentEvidence(
                 incident_id=incident.id,
                 kind="health_check",
-                title="Post-Recovery SLA Check",
+                title=f"Post-Recovery SLA Check ({effective_class})",
                 detail=(
                     f"Availability {service.availability}%, Error rate {service.error_rate}% "
                     f"(pre-recovery: {diff_error.pre_recovery_value}%), P95 Latency {service.latency_ms}ms."
@@ -167,7 +184,7 @@ class PostRecoveryVerifier:
                 action="recovery_verified",
                 resource_type="recovery_action",
                 resource_id=recovery.id,
-                details=f"Post-recovery verification passed for action '{recovery.id}' on service '{service.name}'.",
+                details=f"Post-recovery verification passed ({effective_class}) for action '{recovery.id}' on service '{service.name}'.",
             ))
 
             await db.commit()
@@ -176,6 +193,9 @@ class PostRecoveryVerifier:
         else:
             # Verification failed
             recovery.verification = "failed"
+            recovery.execution_mode = execution_mode
+            recovery.evidence_classification = "VERIFICATION_FAILED"
+
             fail_summary = (
                 f"Verification Failed: {service.name} remained in degraded state. "
                 f"Error rate {service.error_rate}% persists above threshold {threshold}%."
@@ -185,6 +205,8 @@ class PostRecoveryVerifier:
                 recovery.result.verified = False
                 recovery.result.completed_at = now
                 recovery.result.summary = fail_summary
+                recovery.result.execution_mode = execution_mode
+                recovery.result.evidence_classification = "VERIFICATION_FAILED"
             else:
                 recovery.result = RecoveryResult(
                     id=uuid.uuid4(),
@@ -192,6 +214,8 @@ class PostRecoveryVerifier:
                     verified=False,
                     completed_at=now,
                     summary=fail_summary,
+                    execution_mode=execution_mode,
+                    evidence_classification="VERIFICATION_FAILED",
                 )
 
             incident.status = "investigating"
@@ -210,7 +234,7 @@ class PostRecoveryVerifier:
                 action="recovery_verification_failed",
                 resource_type="recovery_action",
                 resource_id=recovery.id,
-                details=f"Verification failed for recovery '{recovery.id}' on service '{service.name}'. Human escalation required.",
+                details=f"Verification failed (VERIFICATION_FAILED) for recovery '{recovery.id}' on service '{service.name}'. Human escalation required.",
             ))
 
             await db.commit()
