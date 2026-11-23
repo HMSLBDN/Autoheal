@@ -11,6 +11,7 @@ import uuid
 
 from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy import select, update
+from sqlalchemy.exc import DBAPIError, IntegrityError, InterfaceError, OperationalError, SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DatabaseDep, get_current_user
@@ -108,93 +109,110 @@ async def register(
     """
     normalized_email = payload.email.lower().strip()
 
-    # 1. Prevent duplicate accounts
-    existing_user_query = await db.execute(
-        select(User).where(User.email == normalized_email)
-    )
-    if existing_user_query.scalar_one_or_none():
+    try:
+        # 1. Prevent duplicate accounts
+        existing_user_query = await db.execute(
+            select(User).where(User.email == normalized_email)
+        )
+        if existing_user_query.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="An account with this email address already exists.",
+            )
+
+        # 2. Prevent unauthorized role escalation during self-registration
+        safe_role = "operator"
+        if payload.role and payload.role.lower() in ("viewer", "operator"):
+            safe_role = payload.role.lower()
+
+        # 3. Associate with organization (resolve default or create if unprovisioned)
+        org_query = await db.execute(
+            select(Organization).where(Organization.slug == settings.DEFAULT_ORGANIZATION_SLUG)
+        )
+        org = org_query.scalar_one_or_none()
+        if not org:
+            org = Organization(
+                id=uuid.uuid4(),
+                slug=settings.DEFAULT_ORGANIZATION_SLUG,
+                name=settings.DEFAULT_ORGANIZATION_NAME,
+                plan="enterprise",
+                is_active=True,
+            )
+            db.add(org)
+            await db.flush()
+
+        # 4. Hash password with Argon2id and create User
+        hashed_pwd = get_password_hash(payload.password)
+        user = User(
+            id=uuid.uuid4(),
+            organization_id=org.id,
+            email=normalized_email,
+            full_name=payload.full_name.strip(),
+            hashed_password=hashed_pwd,
+            role=safe_role,
+            is_active=True,
+        )
+        db.add(user)
+        await db.flush()
+
+        # 5. Issue JWT access token
+        access_token = create_access_token(
+            user_id=str(user.id),
+            email=user.email,
+            role=user.role,
+            org_id=str(user.organization_id),
+        )
+
+        # 6. Issue refresh token and persist hashed value with family ID
+        raw_refresh_token = generate_refresh_token()
+        family_id = str(uuid.uuid4())
+        token_hash = hash_token(raw_refresh_token)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+
+        db_refresh_token = RefreshToken(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            token_hash=token_hash,
+            family_id=family_id,
+            is_revoked=False,
+            expires_at=expires_at,
+            ip_address=client_ip,
+            user_agent=user_agent[:500] if user_agent else None,
+        )
+        db.add(db_refresh_token)
+
+        # 7. Record audit log
+        db.add(AuditLog(
+            organization_id=org.id,
+            user_id=user.id,
+            action="user_registered",
+            resource_type="user",
+            resource_id=str(user.id),
+            details=f"User {user.email} registered successfully with role {user.role}.",
+            ip_address=client_ip,
+        ))
+
+        await db.commit()
+        await db.refresh(user)
+    except HTTPException:
+        raise
+    except IntegrityError as ie:
+        await db.rollback()
+        logger.warning("Registration integrity collision on email %s: %s", normalized_email, ie)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="An account with this email address already exists.",
         )
-
-    # 2. Prevent unauthorized role escalation during self-registration
-    safe_role = "operator"
-    if payload.role and payload.role.lower() in ("viewer", "operator"):
-        safe_role = payload.role.lower()
-
-    # 3. Associate with organization (resolve default or create if unprovisioned)
-    org_query = await db.execute(
-        select(Organization).where(Organization.slug == settings.DEFAULT_ORGANIZATION_SLUG)
-    )
-    org = org_query.scalar_one_or_none()
-    if not org:
-        org = Organization(
-            id=uuid.uuid4(),
-            slug=settings.DEFAULT_ORGANIZATION_SLUG,
-            name=settings.DEFAULT_ORGANIZATION_NAME,
-            plan="enterprise",
-            is_active=True,
+    except (OperationalError, InterfaceError, DBAPIError) as dbe:
+        await db.rollback()
+        logger.error("Database connection failure during registration: %s", dbe)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service temporarily unavailable. Please retry in a few moments.",
         )
-        db.add(org)
-        await db.flush()
-
-    # 4. Hash password with Argon2id and create User
-    hashed_pwd = get_password_hash(payload.password)
-    user = User(
-        id=uuid.uuid4(),
-        organization_id=org.id,
-        email=normalized_email,
-        full_name=payload.full_name.strip(),
-        hashed_password=hashed_pwd,
-        role=safe_role,
-        is_active=True,
-    )
-    db.add(user)
-    await db.flush()
-
-    # 5. Issue JWT access token
-    access_token = create_access_token(
-        user_id=str(user.id),
-        email=user.email,
-        role=user.role,
-        org_id=str(user.organization_id),
-    )
-
-    # 6. Issue refresh token and persist hashed value with family ID
-    raw_refresh_token = generate_refresh_token()
-    family_id = str(uuid.uuid4())
-    token_hash = hash_token(raw_refresh_token)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-
-    client_ip = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-
-    db_refresh_token = RefreshToken(
-        id=uuid.uuid4(),
-        user_id=user.id,
-        token_hash=token_hash,
-        family_id=family_id,
-        is_revoked=False,
-        expires_at=expires_at,
-        ip_address=client_ip,
-        user_agent=user_agent[:500] if user_agent else None,
-    )
-    db.add(db_refresh_token)
-
-    # 7. Record audit log
-    db.add(AuditLog(
-        organization_id=org.id,
-        user_id=user.id,
-        action="user_registered",
-        resource_type="user",
-        resource_id=str(user.id),
-        details=f"User {user.email} registered successfully with role {user.role}.",
-        ip_address=client_ip,
-    ))
-
-    await db.commit()
-    await db.refresh(user)
 
     # 8. Set HttpOnly cookie
     _set_refresh_cookie(response, raw_refresh_token)
@@ -237,66 +255,76 @@ async def login(
     """
     normalized_email = payload.email.lower().strip()
 
-    stmt = select(User).options(selectinload(User.organization)).where(User.email == normalized_email)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+    try:
+        stmt = select(User).options(selectinload(User.organization)).where(User.email == normalized_email)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
 
-    # Fail securely on non-existent user or invalid password
-    if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password.",
-            headers={"WWW-Authenticate": "Bearer"},
+        # Fail securely on non-existent user or invalid password
+        if not user or not verify_password(payload.password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Prevent login for deactivated users
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your account has been deactivated. Please contact your organization administrator.",
+            )
+
+        # Issue access token
+        access_token = create_access_token(
+            user_id=str(user.id),
+            email=user.email,
+            role=user.role,
+            org_id=str(user.organization_id),
         )
 
-    # Prevent login for deactivated users
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your account has been deactivated. Please contact your organization administrator.",
+        # Issue refresh token in new family
+        raw_refresh_token = generate_refresh_token()
+        family_id = str(uuid.uuid4())
+        token_hash = hash_token(raw_refresh_token)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+        client_ip = request.client.host if request.client else None
+        user_agent = request.headers.get("user-agent")
+
+        db_refresh_token = RefreshToken(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            token_hash=token_hash,
+            family_id=family_id,
+            is_revoked=False,
+            expires_at=expires_at,
+            ip_address=client_ip,
+            user_agent=user_agent[:500] if user_agent else None,
         )
+        db.add(db_refresh_token)
 
-    # Issue access token
-    access_token = create_access_token(
-        user_id=str(user.id),
-        email=user.email,
-        role=user.role,
-        org_id=str(user.organization_id),
-    )
+        # Record login audit log
+        db.add(AuditLog(
+            organization_id=user.organization_id,
+            user_id=user.id,
+            action="user_login",
+            resource_type="user",
+            resource_id=str(user.id),
+            details=f"User {user.email} logged in successfully.",
+            ip_address=client_ip,
+        ))
 
-    # Issue refresh token in new family
-    raw_refresh_token = generate_refresh_token()
-    family_id = str(uuid.uuid4())
-    token_hash = hash_token(raw_refresh_token)
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-
-    client_ip = request.client.host if request.client else None
-    user_agent = request.headers.get("user-agent")
-
-    db_refresh_token = RefreshToken(
-        id=uuid.uuid4(),
-        user_id=user.id,
-        token_hash=token_hash,
-        family_id=family_id,
-        is_revoked=False,
-        expires_at=expires_at,
-        ip_address=client_ip,
-        user_agent=user_agent[:500] if user_agent else None,
-    )
-    db.add(db_refresh_token)
-
-    # Record login audit log
-    db.add(AuditLog(
-        organization_id=user.organization_id,
-        user_id=user.id,
-        action="user_login",
-        resource_type="user",
-        resource_id=str(user.id),
-        details=f"User {user.email} logged in successfully.",
-        ip_address=client_ip,
-    ))
-
-    await db.commit()
+        await db.commit()
+    except HTTPException:
+        raise
+    except (OperationalError, InterfaceError, DBAPIError) as dbe:
+        await db.rollback()
+        logger.error("Database connection failure during login: %s", dbe)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database service temporarily unavailable. Please retry in a few moments.",
+        )
 
     # Set cookie
     _set_refresh_cookie(response, raw_refresh_token)

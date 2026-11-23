@@ -8,7 +8,7 @@ import { Brand } from '@/components/marketing/brand'
 import { isApiConfigured, ApiError } from '@/lib/api/client'
 import { authApi, healthApi } from '@/lib/api/resources'
 
-type ConnectionState = 'not_configured' | 'checking' | 'connected' | 'unreachable'
+type ConnectionState = 'not_configured' | 'checking' | 'connected' | 'db_unreachable' | 'unreachable'
 
 export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
   const router = useRouter()
@@ -31,8 +31,14 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
 
     async function checkBackend() {
       try {
-        await healthApi.get(controller.signal)
-        if (isMounted) setConnectionStatus('connected')
+        const health = await healthApi.get(controller.signal)
+        if (isMounted) {
+          if (health.database && health.database !== 'connected') {
+            setConnectionStatus('db_unreachable')
+          } else {
+            setConnectionStatus('connected')
+          }
+        }
       } catch (err) {
         // Only mark unreachable if the component is still mounted and not deliberately aborted on unmount
         if (isMounted) {
@@ -134,7 +140,12 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
         )}
         {connectionStatus === 'connected' && (
           <>
-            <strong style={{ color: '#dedaff' }}>Connected to AutoHeal API.</strong> Secured with Argon2id hashing and JWT access tokens.
+            <strong style={{ color: '#dedaff' }}>API & Database Connected.</strong> Secured with Argon2id hashing and JWT access tokens.
+          </>
+        )}
+        {connectionStatus === 'db_unreachable' && (
+          <>
+            <strong style={{ color: '#fca5a5' }}>Database unavailable.</strong> API is online, but the Neon database connection is pending or offline.
           </>
         )}
         {connectionStatus === 'unreachable' && (

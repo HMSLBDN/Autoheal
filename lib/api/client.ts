@@ -102,7 +102,7 @@ type ResponseShape = {
 }
 
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) {
+  constructor(message: string, public readonly status: number, public readonly requestId?: string) {
     super(message)
     this.name = 'ApiError'
   }
@@ -152,6 +152,10 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   const headers: Record<string, string> = {
     Accept: 'application/json',
     ...(init.headers as Record<string, string> || {}),
+  }
+
+  if (!headers['X-Request-ID']) {
+    headers['X-Request-ID'] = `req-${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`
   }
 
   const token = getAccessToken()
@@ -216,14 +220,18 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
   if (!response.ok) {
     let message = `Request failed (${response.status})`
+    let requestId: string | undefined = response.headers.get('x-request-id') || response.headers.get('x-vercel-id') || undefined
     if (body && typeof body === 'object') {
+      if ('request_id' in body && typeof body.request_id === 'string') {
+        requestId = body.request_id
+      }
       if ('detail' in body) {
         message = Array.isArray(body.detail)
           ? body.detail.map((e: { msg?: string }) => e.msg || String(e)).join(', ')
           : String(body.detail)
       }
     }
-    throw new ApiError(message, response.status)
+    throw new ApiError(message, response.status, requestId)
   }
 
   return body as T

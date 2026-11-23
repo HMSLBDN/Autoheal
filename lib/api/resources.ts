@@ -138,7 +138,11 @@ function validateAnalytics(value: unknown): AnalyticsSummary {
 
 export const healthApi = {
   async get(signal?: AbortSignal) {
-    return asObject<{ status: string; timestamp?: string }>(await apiRequest<unknown>('/api/v1/health', { signal }), 'health', { strings: ['status'] })
+    return asObject<{ status: string; timestamp?: string; database?: string; database_schema?: string; api?: string }>(
+      await apiRequest<unknown>('/api/v1/health', { signal }),
+      'health',
+      { strings: ['status'] }
+    )
   },
 }
 

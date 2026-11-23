@@ -70,16 +70,54 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     """
     Global catch-all exception handler that sanitizes internal stack traces
     while logging detailed errors correlated with the unique request ID.
+    Classifies database outages and returns safe user responses.
     """
-    request_id = getattr(request.state, "request_id", None) or "unknown"
-    logger.exception("Unhandled server exception processing request %s: %s", request_id, exc)
+    request_id = (
+        getattr(request.state, "request_id", None)
+        or request.headers.get("X-Request-ID")
+        or request.headers.get("x-vercel-id")
+        or "unknown"
+    )
+
+    # Classify error category safely
+    exc_module = getattr(exc.__class__, "__module__", "")
+    exc_name = exc.__class__.__name__
+    is_db_error = any(mod in exc_module for mod in ("sqlalchemy", "asyncpg", "psycopg")) or "connect()" in str(exc)
+    category = "database_connection" if is_db_error else "internal_server_error"
+
+    logger.error(
+        "request_unhandled_error method=%s path=%s request_id=%s category=%s error_type=%s: %s",
+        request.method,
+        request.url.path,
+        request_id,
+        category,
+        exc_name,
+        str(exc),
+        exc_info=True,
+    )
+
+    status_code = 503 if is_db_error else 500
+    user_detail = (
+        f"Database service temporarily unavailable. Please quote request ID {request_id} to support."
+        if is_db_error
+        else f"An unexpected internal error occurred. Please quote request ID {request_id} to support."
+    )
+
+    response_headers = {
+        "X-Request-ID": request_id,
+        "Cache-Control": "no-store",
+    }
+    if request.headers.get("x-vercel-id"):
+        response_headers["x-vercel-id"] = request.headers["x-vercel-id"]
+
     return JSONResponse(
-        status_code=500,
+        status_code=status_code,
         content={
-            "detail": f"An unexpected internal error occurred. Please quote request ID {request_id} to support.",
+            "detail": user_detail,
             "request_id": request_id,
+            "category": category,
         },
-        headers={"X-Request-ID": request_id},
+        headers=response_headers,
     )
 
 

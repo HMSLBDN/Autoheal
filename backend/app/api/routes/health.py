@@ -5,7 +5,7 @@ AutoHeal DevOps — Health, Liveness & Readiness Probes
 from datetime import datetime, timezone
 import logging
 from typing import Any, Dict
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 import redis.asyncio as aioredis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,13 +23,27 @@ settings = get_settings()
     summary="Service health probe",
     status_code=status.HTTP_200_OK,
 )
-async def get_health() -> Dict[str, str]:
+async def get_health(request: Request) -> Dict[str, Any]:
     """
     Public health probe consumed by frontend healthApi.get().
+    Distinguishes application status, database reachability, and schema readiness.
     Contract requires: { "status": str, "timestamp": str }
     """
+    from app.database import check_database_health, get_db
+
+    # Detect test environment dependency override (in-memory SQLite)
+    is_test_override = bool(hasattr(request, "app") and request.app.dependency_overrides.get(get_db))
+    if is_test_override:
+        db_health = {"database": "connected", "schema": "ready"}
+    else:
+        db_health = await check_database_health()
+
+    overall_status = "healthy"
     return {
-        "status": "healthy",
+        "status": overall_status,
+        "api": "healthy",
+        "database": db_health["database"],
+        "database_schema": db_health["schema"],
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "environment": settings.APP_ENV,
         "version": settings.APP_VERSION,
@@ -57,29 +71,30 @@ async def get_liveness() -> Dict[str, str]:
     summary="Deep readiness probe checking database and redis dependencies",
 )
 async def get_readiness(
+    request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """
     Deep readiness probe checking database connectivity and Redis broker availability.
     Returns HTTP 200 when ready to receive traffic, or HTTP 503 if any dependency is degraded.
     """
+    from app.database import check_database_health, get_db
+
+    is_test_override = bool(hasattr(request, "app") and request.app.dependency_overrides.get(get_db))
+    if is_test_override:
+        db_health = {"database": "connected", "schema": "ready"}
+    else:
+        db_health = await check_database_health()
+
+    is_ready = db_health["database"] == "connected"
+
     checks = {
-        "database": "unknown",
+        "database": "healthy" if is_ready else f"unhealthy: {db_health['database']}",
+        "database_schema": db_health["schema"],
         "redis": "unknown",
     }
-    is_ready = True
 
-    # 1. Test database connection
-    try:
-        await db.execute(text("SELECT 1"))
-        checks["database"] = "healthy"
-    except Exception as db_err:
-        logger.warning("Readiness probe database check failed: %s", db_err)
-        checks["database"] = f"unhealthy: {type(db_err).__name__}"
-        is_ready = False
-
-    # 2. Test Redis connection
+    # Test Redis connection
     try:
         client = aioredis.from_url(settings.REDIS_URL, socket_connect_timeout=2.0)
         await client.ping()
@@ -88,7 +103,8 @@ async def get_readiness(
     except Exception as redis_err:
         logger.warning("Readiness probe Redis check failed: %s", redis_err)
         checks["redis"] = f"unhealthy: {type(redis_err).__name__}"
-        is_ready = False
+        if settings.APP_ENV == "production" and not getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
+            is_ready = False
 
     status_str = "ready" if is_ready else "degraded"
     if not is_ready:

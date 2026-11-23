@@ -131,7 +131,12 @@ class RequestTracingMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        request_id = request.headers.get("X-Request-ID") or f"req-{uuid.uuid4().hex[:12]}"
+        request_id = (
+            request.headers.get("X-Request-ID")
+            or request.headers.get("x-vercel-id")
+            or request.headers.get("x-correlation-id")
+            or f"req-{uuid.uuid4().hex[:12]}"
+        )
         request.state.request_id = request_id
 
         start_time = time.time()
@@ -154,6 +159,8 @@ class RequestTracingMiddleware(BaseHTTPMiddleware):
             enterprise_metrics.record_request(request.method, request.url.path, response.status_code, duration_s)
 
             response.headers["X-Request-ID"] = request_id
+            if request.headers.get("x-vercel-id"):
+                response.headers["x-vercel-id"] = request.headers["x-vercel-id"]
 
             # Avoid logging health checks at high volume
             if not request.url.path.endswith("/health"):

@@ -139,10 +139,11 @@ class Settings(BaseSettings):
                 query["ssl"] = sslmode_val
 
             # Strip libpq-specific parameters unsupported by asyncpg.connect()
-            # Neon connection strings commonly append channel_binding=require or endpoint=ep-xxx
+            # Neon connection strings commonly append channel_binding=require, endpoint=ep-xxx, or options=endpoint=ep-xxx
             libpq_unsupported = {
                 "channel_binding",
                 "endpoint",
+                "options",
                 "connect_timeout",
                 "keepalives",
                 "keepalives_idle",
@@ -151,6 +152,15 @@ class Settings(BaseSettings):
                 "tcp_user_timeout",
                 "gssencmode",
                 "target_session_attrs",
+                "sslcert",
+                "sslkey",
+                "sslrootcert",
+                "sslcrl",
+                "sslcompression",
+                "replication",
+                "service",
+                "passfile",
+                "client_encoding",
             }
             for param in libpq_unsupported:
                 query.pop(param, None)
