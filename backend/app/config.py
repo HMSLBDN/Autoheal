@@ -101,18 +101,34 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def assemble_database_url(cls, value: str) -> str:
+        """
+        Normalizes DATABASE_URL for SQLAlchemy asyncpg dialect.
+        1. Strips leading/trailing whitespace.
+        2. Preserves SQLite URLs untouched (e.g. sqlite+aiosqlite:///:memory:).
+        3. Converts driver to postgresql+asyncpg.
+        4. Translates libpq 'sslmode' into asyncpg 'ssl' parameter.
+        5. Strips libpq-only parameters that cause asyncpg.connect() TypeError
+           (e.g., 'channel_binding', 'endpoint', 'options', 'target_session_attrs').
+        6. Preserves user, password (including special characters), host, port, dbname,
+           and valid asyncpg parameters.
+        """
         if not value:
             return value
+        cleaned = value.strip()
         # Preserve SQLite URLs untouched (e.g. sqlite+aiosqlite:///:memory:)
-        if value.startswith("sqlite"):
-            return value
+        if cleaned.startswith("sqlite"):
+            return cleaned
+
         try:
             from sqlalchemy.engine import make_url
-            url = make_url(value)
+            url = make_url(cleaned)
             driver = url.drivername
             if driver in ("postgres", "postgresql"):
                 driver = "postgresql+asyncpg"
+
             query = dict(url.query)
+
+            # Translate libpq 'sslmode' to asyncpg 'ssl'
             if "sslmode" in query:
                 sslmode_val = query.pop("sslmode")
                 valid_modes = {"disable", "prefer", "require", "verify-ca", "verify-full"}
@@ -121,11 +137,29 @@ class Settings(BaseSettings):
                         f"Invalid PostgreSQL sslmode: '{sslmode_val}'. Supported modes are: {sorted(valid_modes)}"
                     )
                 query["ssl"] = sslmode_val
+
+            # Strip libpq-specific parameters unsupported by asyncpg.connect()
+            # Neon connection strings commonly append channel_binding=require or endpoint=ep-xxx
+            libpq_unsupported = {
+                "channel_binding",
+                "endpoint",
+                "connect_timeout",
+                "keepalives",
+                "keepalives_idle",
+                "keepalives_interval",
+                "keepalives_count",
+                "tcp_user_timeout",
+                "gssencmode",
+                "target_session_attrs",
+            }
+            for param in libpq_unsupported:
+                query.pop(param, None)
+
             return url.set(drivername=driver, query=query).render_as_string(hide_password=False)
         except ValueError:
             raise
         except Exception:
-            return value
+            return cleaned
 
     DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
