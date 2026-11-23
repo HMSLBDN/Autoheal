@@ -131,6 +131,10 @@ class Settings(BaseSettings):
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 1800
+    DB_POOL_CLASS: Optional[str] = Field(
+        default=None,
+        description="Explicit connection pool class name, e.g. 'NullPool' for serverless environments (Neon/Vercel)"
+    )
 
     # Database SSL / TLS Settings
     DB_SSL_MODE: Optional[Literal["disable", "prefer", "require", "verify-ca", "verify-full"]] = None

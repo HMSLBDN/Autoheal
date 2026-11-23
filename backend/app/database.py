@@ -81,14 +81,28 @@ def get_engine_args(database_url: str) -> dict:
         else:
             engine_kwargs["poolclass"] = NullPool
     else:
-        # PostgreSQL (asyncpg) pool configuration
-        engine_kwargs.update({
-            "pool_pre_ping": True,
-            "pool_size": settings.DB_POOL_SIZE,
-            "max_overflow": settings.DB_MAX_OVERFLOW,
-            "pool_recycle": settings.DB_POOL_RECYCLE,
-            "pool_timeout": settings.DB_POOL_TIMEOUT,
-        })
+        # Check for Serverless runtime or explicit NullPool configuration
+        is_serverless = (
+            os.environ.get("VERCEL") == "1"
+            or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+            or getattr(settings, "DB_POOL_CLASS", None) == "NullPool"
+            or os.environ.get("DB_POOL_CLASS") == "NullPool"
+            or "-pooler" in database_url
+        )
+
+        if is_serverless:
+            # NullPool is optimal for serverless environments (e.g. Vercel + Neon pooler)
+            # where connections should not persist across ephemeral invocations.
+            engine_kwargs["poolclass"] = NullPool
+        else:
+            # PostgreSQL (asyncpg) pool configuration for persistent workers/servers
+            engine_kwargs.update({
+                "pool_pre_ping": True,
+                "pool_size": settings.DB_POOL_SIZE,
+                "max_overflow": settings.DB_MAX_OVERFLOW,
+                "pool_recycle": settings.DB_POOL_RECYCLE,
+                "pool_timeout": settings.DB_POOL_TIMEOUT,
+            })
         ssl_ctx = create_database_ssl_context(settings)
         if ssl_ctx:
             engine_kwargs.setdefault("connect_args", {})["ssl"] = ssl_ctx
