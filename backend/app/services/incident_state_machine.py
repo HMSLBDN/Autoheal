@@ -84,7 +84,11 @@ class IncidentStateMachine:
             select(RecoveryAction)
             .options(selectinload(RecoveryAction.result))
             .where(RecoveryAction.incident_id == incident.id)
-            .order_by(desc(RecoveryAction.requested_at))
+            .order_by(
+                desc(RecoveryAction.requested_at),
+                desc(RecoveryAction.created_at),
+                desc(RecoveryAction.id),
+            )
         )
         res = await db.execute(stmt)
         recoveries = res.scalars().all()

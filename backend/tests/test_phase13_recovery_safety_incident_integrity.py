@@ -16,7 +16,7 @@ Verifies:
 13. Every transition has an auditable actor, timestamp, previous state, new state, and reason.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import uuid
 import pytest
@@ -273,7 +273,7 @@ async def test_cannot_mark_resolved_without_health_verification(client: TestClie
 async def test_cannot_mark_resolved_when_verification_failed(client: TestClient, seed_data: dict, db_session: AsyncSession):
     """Verify transition to resolved is rejected if verification failed."""
     inc = seed_data["inc_a1"]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc) + timedelta(seconds=1)
 
     # Attach a failed recovery action
     failed_rec = RecoveryAction(
@@ -362,7 +362,7 @@ async def test_valid_verified_recovery_allows_resolution(
 ):
     """Verify that when recovery verification passes, transition to resolved succeeds."""
     inc = seed_data["inc_a1"]
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc) + timedelta(seconds=1)
 
     # Attach verified recovery action
     verified_rec = RecoveryAction(
@@ -416,3 +416,104 @@ async def test_transition_requires_mandatory_reason_and_rejects_self_transition(
     )
     assert res_self.status_code == 400
     assert "already in state" in res_self.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_deterministic_recovery_action_selection_on_identical_timestamps(
+    client: TestClient, seed_data: dict, db_session: AsyncSession
+):
+    """
+    Verifies that when multiple recovery actions share the exact same requested_at
+    and created_at timestamps, the tie-breaker is strictly deterministic using desc(RecoveryAction.id).
+    """
+    inc = seed_data["inc_a1"]
+    fixed_time = datetime(2026, 11, 23, 12, 0, 0, tzinfo=timezone.utc)
+
+    # Action 1: ID 'REC-AAA-FAILED', verification='failed'
+    rec_aaa = RecoveryAction(
+        id="REC-AAA-FAILED",
+        incident_id=inc.id,
+        service_id=inc.service_id,
+        service_name=inc.service_name,
+        action="restart_service",
+        status="completed",
+        verification="failed",
+        approval_required=True,
+        requested_by="operator@org-a.com",
+        requested_at=fixed_time,
+        created_at=fixed_time,
+    )
+    rec_aaa.result = RecoveryResult(
+        id=uuid.uuid4(),
+        recovery_action_id=rec_aaa.id,
+        verified=False,
+        summary="Check failed",
+        completed_at=fixed_time,
+    )
+
+    # Action 2: ID 'REC-ZZZ-PASSED', verification='passed'
+    rec_zzz = RecoveryAction(
+        id="REC-ZZZ-PASSED",
+        incident_id=inc.id,
+        service_id=inc.service_id,
+        service_name=inc.service_name,
+        action="restart_service",
+        status="completed",
+        verification="passed",
+        approval_required=True,
+        requested_by="operator@org-a.com",
+        requested_at=fixed_time,
+        created_at=fixed_time,
+    )
+    rec_zzz.result = RecoveryResult(
+        id=uuid.uuid4(),
+        recovery_action_id=rec_zzz.id,
+        verified=True,
+        summary="Check passed 200 OK",
+        completed_at=fixed_time,
+    )
+
+    db_session.add_all([rec_aaa, rec_zzz])
+    await db_session.commit()
+
+    # Under desc(RecoveryAction.id), 'REC-ZZZ-PASSED' > 'REC-AAA-FAILED', so 'REC-ZZZ-PASSED'
+    # (verification='passed') is selected as latest_rec, allowing resolution.
+    eligible, verified, diag = await IncidentStateMachine.verify_resolution_eligibility(
+        db=db_session, incident=inc
+    )
+    assert eligible is True
+    assert verified is True
+    assert "Eligible for resolution" in diag
+
+    # Now add Action 3: ID 'REC-ZZZZ-FAILED' with the exact same timestamps.
+    # Because 'REC-ZZZZ-FAILED' > 'REC-ZZZ-PASSED' lexicographically,
+    # it must become the new latest_rec, immediately blocking resolution!
+    rec_zzzz = RecoveryAction(
+        id="REC-ZZZZ-FAILED",
+        incident_id=inc.id,
+        service_id=inc.service_id,
+        service_name=inc.service_name,
+        action="restart_service",
+        status="completed",
+        verification="failed",
+        approval_required=True,
+        requested_by="operator@org-a.com",
+        requested_at=fixed_time,
+        created_at=fixed_time,
+    )
+    rec_zzzz.result = RecoveryResult(
+        id=uuid.uuid4(),
+        recovery_action_id=rec_zzzz.id,
+        verified=False,
+        summary="Latest check failed",
+        completed_at=fixed_time,
+    )
+    db_session.add(rec_zzzz)
+    await db_session.commit()
+
+    eligible2, verified2, diag2 = await IncidentStateMachine.verify_resolution_eligibility(
+        db=db_session, incident=inc
+    )
+    assert eligible2 is False
+    assert verified2 is False
+    assert "Automated health verification failed for recovery 'REC-ZZZZ-FAILED'" in diag2

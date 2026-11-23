@@ -4,7 +4,7 @@ Provides an isolated in-memory async SQLite database and pre-seeded organization
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
 import sys
 from typing import AsyncGenerator
@@ -235,7 +235,7 @@ async def seed_data(db_session: AsyncSession):
         status="pending_approval",
         approval_required=True,
         requested_by="AutoHeal policy",
-        requested_at=datetime.now(timezone.utc),
+        requested_at=datetime.now(timezone.utc) - timedelta(minutes=5),
         verification="pending",
     )
     rec_completed = RecoveryAction(
@@ -279,6 +279,22 @@ async def seed_data(db_session: AsyncSession):
         "rec_pending": rec_pending,
         "rec_completed": rec_completed,
     }
+
+
+@pytest.fixture(autouse=True)
+def preserve_dependency_overrides():
+    """
+    Saves a snapshot of app.dependency_overrides before each test runs,
+    and restores that snapshot after the test completes.
+    This guarantees that modifications or injections during a test
+    cannot leak into subsequent tests, while preserving active fixtures.
+    """
+    saved_overrides = dict(app.dependency_overrides)
+    try:
+        yield
+    finally:
+        app.dependency_overrides.clear()
+        app.dependency_overrides.update(saved_overrides)
 
 
 @pytest.fixture
