@@ -426,7 +426,25 @@ async def test_deterministic_recovery_action_selection_on_identical_timestamps(
     Verifies that when multiple recovery actions share the exact same requested_at
     and created_at timestamps, the tie-breaker is strictly deterministic using desc(RecoveryAction.id).
     """
-    inc = seed_data["inc_a1"]
+    org_a = seed_data["org_a"]
+    svc_a2 = seed_data["svc_a2"]
+    inc = Incident(
+        id=f"INC-TIE-{uuid.uuid4().hex[:8]}",
+        organization_id=org_a.id,
+        service_id=svc_a2.id,
+        service_name=svc_a2.name,
+        title="Deterministic Tiebreaker Incident",
+        severity="high",
+        status="investigating",
+        recovery_status="Action initiated",
+        error_rate=1.84,
+        threshold=1.0,
+        probable_cause="Testing tiebreaker",
+        recommended_action="restart_service",
+    )
+    db_session.add(inc)
+    await db_session.flush()
+
     fixed_time = datetime(2026, 11, 23, 12, 0, 0, tzinfo=timezone.utc)
 
     # Action 1: ID 'REC-AAA-FAILED', verification='failed'
