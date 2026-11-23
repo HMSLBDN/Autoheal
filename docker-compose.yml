@@ -40,7 +40,8 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-autoheal_user}:${POSTGRES_PASSWORD:-autoheal_secure_pass}@db:5432/${POSTGRES_DB:-autoheal_db}
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_secure_pass}@redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-autoheal_super_secret_jwt_key_min_32_chars_prod}
-      - ALERTMANAGER_WEBHOOK_SECRET=${ALERTMANAGER_WEBHOOK_SECRET:-autoheal_alertmanager_hmac_secret_key_32chars}
+      - ALERTMANAGER_HMAC_SECRET=${ALERTMANAGER_HMAC_SECRET:-}
+      - ALERTMANAGER_WEBHOOK_SECRET=${ALERTMANAGER_HMAC_SECRET:-}
       - PROMETHEUS_URL=http://prometheus:9090
       - ALERTMANAGER_URL=http://alertmanager:9093
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
@@ -162,7 +163,7 @@ services:
       - --web.console.templates=/usr/share/prometheus/consoles
       - --web.enable-lifecycle
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     networks:
       - autoheal_network
 
@@ -175,12 +176,13 @@ services:
     restart: unless-stopped
     volumes:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./monitoring/secrets/webhook_token:/etc/alertmanager/secrets/webhook_token:ro
       - alertdata:/alertmanager
     command:
       - --config.file=/etc/alertmanager/alertmanager.yml
       - --storage.path=/alertmanager
     ports:
-      - "9093:9093"
+      - "127.0.0.1:9093:9093"
     networks:
       - autoheal_network
 
@@ -198,7 +200,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin_secure_pass}
       - GF_USERS_ALLOW_SIGN_UP=false
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     networks:
       - autoheal_network
 
@@ -214,7 +216,7 @@ services:
     volumes:
       - /:/host:ro
     ports:
-      - "9100:9100"
+      - "127.0.0.1:9100:9100"
     networks:
       - autoheal_network
 
@@ -234,7 +236,7 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     networks:
       - autoheal_network
 
@@ -286,7 +288,7 @@ services:
       - SERVICE_PORT=8080
       - SERVICE_ENV=production
     ports:
-      - "8085:8080"
+      - "127.0.0.1:8085:8080"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')\""]
       interval: 10s

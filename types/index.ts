@@ -122,6 +122,36 @@ export interface AnalyticsSummary {
   history: Array<{ date: string; incidents: number; recoveries: number; availability: number }>
 }
 
+export interface DetectionLatencyPoint {
+  label: string
+  latencySeconds: number | null
+  targetSeconds?: number
+  note?: string
+}
+
+export interface RecoveryDurationPoint {
+  label: string
+  durationSeconds: number | null
+  serviceName?: string
+  action?: string
+  status?: string
+  verification?: string
+}
+
+export interface ErrorRatePoint {
+  label: string
+  errorRate: number | null
+  threshold?: number
+  status?: string
+}
+
+export interface RecoverySuccessPoint {
+  label: string
+  successRate: number | null
+  totalOperations?: number
+  successfulOperations?: number
+}
+
 export type AgentStatus = 'online' | 'busy' | 'degraded' | 'offline' | 'revoked'
 
 export interface InfrastructureAgent {

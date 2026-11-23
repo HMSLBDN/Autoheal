@@ -45,3 +45,11 @@ backups/
 *.sql.gz
 *.sqlite.gz
 *.sha256
+
+# AutoHeal Secrets & Tokens
+monitoring/secrets/*
+!monitoring/secrets/*.example
+!monitoring/secrets/.gitkeep
+
+# Backup and temporary files
+*.bak

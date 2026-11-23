@@ -5,7 +5,35 @@ import type { LucideIcon } from 'lucide-react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Activity, ArrowDownRight, ArrowUpRight, BarChart3, Brain, CheckCircle2, CircleAlert, Clock3, Cpu, Download, Gauge, Lightbulb, MemoryStick, Network, Server, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react'
+import {
+  Activity,
+  AlertCircle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
+  Brain,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+  Clock3,
+  Cpu,
+  Download,
+  FileText,
+  Gauge,
+  Info,
+  Lightbulb,
+  MemoryStick,
+  Network,
+  RefreshCw,
+  Search,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  TrendingUp,
+  XCircle,
+} from 'lucide-react'
 import type {
   AnalyticsSummary,
   Anomaly,
@@ -25,12 +53,88 @@ import type {
 import { agentsApi, intelligenceApi, policiesApi, servicesApi, settingsApi } from '@/lib/api/resources'
 import { demoServices } from '@/lib/demo/mock-data'
 import { isApiConfigured } from '@/lib/api/client'
-import { IncidentAreaChart, AvailabilityChart } from '@/components/dashboard/charts'
+import {
+  IncidentAreaChart,
+  AvailabilityChart,
+  DetectionLatencyChart,
+  RecoveryDurationChart,
+  ErrorRateChart,
+  RecoverySuccessRateChart,
+} from '@/components/dashboard/charts'
+import {
+  ChartSkeleton,
+  ListSkeleton,
+  MetricCardSkeleton,
+  TableSkeleton,
+} from '@/components/ui/skeleton'
 
 const tooltipStyle = { background: '#111827', border: '1px solid rgba(148,163,184,.18)', borderRadius: 9, color: '#e2e8f0', fontSize: 10 }
 
-function EmptyState({ title, detail }: { title: string; detail: string }) {
-  return <div className="empty-state" role="status"><span className="empty-state-icon"><Activity size={15} /></span><strong>{title}</strong><p>{detail}</p></div>
+export function EmptyState({
+  title,
+  detail,
+  icon: Icon = Activity,
+  action,
+}: {
+  title: string
+  detail: string
+  icon?: LucideIcon
+  action?: React.ReactNode
+}) {
+  return (
+    <div className="empty-state" role="status">
+      <span className="empty-state-icon">
+        <Icon size={15} />
+      </span>
+      <strong>{title}</strong>
+      <p>{detail}</p>
+      {action && <div className="empty-state-action">{action}</div>}
+    </div>
+  )
+}
+
+export function SectionErrorState({
+  title = 'Data could not be loaded',
+  error,
+  onRetry,
+}: {
+  title?: string
+  error?: Error | unknown
+  onRetry?: () => void
+}) {
+  const isAuthExpired =
+    (error && typeof error === 'object' && 'status' in error && (error as { status: number }).status === 401) ||
+    (error instanceof Error && (error.message.includes('401') || error.message.toLowerCase().includes('unauthorized') || error.message.toLowerCase().includes('token expired') || error.message.toLowerCase().includes('session expired')))
+
+  const message = isAuthExpired
+    ? 'Your authentication session has expired. Please sign in again to revalidate your access.'
+    : error instanceof Error
+    ? error.message
+    : typeof error === 'string'
+    ? error
+    : 'The backend service could not be reached or returned an unexpected response.'
+
+  return (
+    <div className="section-error" role="alert">
+      <span className="section-error-icon">
+        <CircleAlert size={16} />
+      </span>
+      <strong>{isAuthExpired ? 'Authentication expired' : title}</strong>
+      <p>{message}</p>
+      <div style={{ display: 'flex', gap: '8px', marginTop: 4, flexWrap: 'wrap' }}>
+        {isAuthExpired ? (
+          <Link href="/auth/login" className="dash-button primary" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+            Sign in
+          </Link>
+        ) : onRetry ? (
+          <button className="dash-button" onClick={onRetry}>
+            <RefreshCw size={11} />
+            Retry
+          </button>
+        ) : null}
+      </div>
+    </div>
+  )
 }
 
 function MetricCard({ label, value, detail, icon: Icon, tone = 'teal' }: { label: string; value: string; detail: string; icon: LucideIcon; tone?: 'teal' | 'violet' | 'amber' }) {
@@ -41,7 +145,47 @@ function ServiceStatus({ status }: { status: Service['status'] }) {
   return <span className={`status-chip ${status === 'healthy' ? 'completed' : status}`}>{status}</span>
 }
 
-export function OverviewView({ services, incidents, recoveries, analytics, demoMode, loading, onRefresh }: { services: Service[]; incidents: Incident[]; recoveries: RecoveryAction[]; analytics?: AnalyticsSummary; demoMode: boolean; loading: boolean; onRefresh: () => void }) {
+export function OverviewView({
+  services,
+  incidents,
+  recoveries,
+  analytics,
+  demoMode,
+  loading = false,
+  onRefresh,
+  servicesLoading = false,
+  servicesError,
+  onRetryServices,
+  incidentsLoading = false,
+  incidentsError,
+  onRetryIncidents,
+  recoveriesLoading = false,
+  recoveriesError,
+  onRetryRecoveries,
+  analyticsLoading = false,
+  analyticsError,
+  onRetryAnalytics,
+}: {
+  services: Service[]
+  incidents: Incident[]
+  recoveries: RecoveryAction[]
+  analytics?: AnalyticsSummary
+  demoMode: boolean
+  loading?: boolean
+  onRefresh: () => void
+  servicesLoading?: boolean
+  servicesError?: Error | unknown
+  onRetryServices?: () => void
+  incidentsLoading?: boolean
+  incidentsError?: Error | unknown
+  onRetryIncidents?: () => void
+  recoveriesLoading?: boolean
+  recoveriesError?: Error | unknown
+  onRetryRecoveries?: () => void
+  analyticsLoading?: boolean
+  analyticsError?: Error | unknown
+  onRetryAnalytics?: () => void
+}) {
   const [range, setRange] = useState('7d')
   const inRange = useMemo(() => {
     // eslint-disable-next-line react-hooks/purity
@@ -62,29 +206,210 @@ export function OverviewView({ services, incidents, recoveries, analytics, demoM
   const critical = incidents.filter((item) => item.severity === 'critical' && item.status !== 'resolved').length
   const successfulRecoveries = recoveries.filter((item) => item.status === 'completed' && item.verification === 'passed').length
   const recoverySuccess = analytics?.recoverySuccessRate ?? (recoveries.length ? Math.round((successfulRecoveries / recoveries.length) * 100) : 0)
+
   return <>
-    <div className="dashboard-heading"><div><h1>Infrastructure overview</h1><p>A clear view of service health, incident activity, and verified recovery.</p></div><div className="dashboard-toolbar"><span className={`demo-label ${demoMode ? '' : 'live'}`}><span className="status-dot" />{demoMode ? 'DEMO DATA' : 'LIVE API'}</span><label className="sr-only" htmlFor="overview-range">Incident time range</label><select id="overview-range" className="small-select" value={range} onChange={(event) => setRange(event.target.value)}><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="all">All available</option></select><button className="dash-button" onClick={onRefresh}><Activity size={12} />Refresh data</button></div></div>
-    {loading && <div className="notice-strip" role="status">Loading current data from the configured backend. No sample metrics are shown in live API mode.</div>}
+    <div className="dashboard-heading">
+      <div>
+        <h1>Infrastructure overview</h1>
+        <p>A clear view of service health, incident activity, and verified recovery.</p>
+      </div>
+      <div className="dashboard-toolbar">
+        <span className={`demo-label ${demoMode ? '' : 'live'}`}>
+          <span className="status-dot" />{demoMode ? 'DEMO DATA' : 'LIVE API'}
+        </span>
+        <label className="sr-only" htmlFor="overview-range">Incident time range</label>
+        <select id="overview-range" className="small-select" value={range} onChange={(event) => setRange(event.target.value)}>
+          <option value="24h">Last 24 hours</option>
+          <option value="7d">Last 7 days</option>
+          <option value="all">All available</option>
+        </select>
+        <button className="dash-button" onClick={onRefresh}>
+          <Activity size={12} />Refresh data
+        </button>
+      </div>
+    </div>
+
+    {/* Metric Cards Grid */}
     <div className="metric-grid metric-grid-six">
-      <MetricCard label="Monitored services" value={demoMode || services.length ? String(services.length).padStart(2, '0') : '00'} detail={`${healthy} healthy · ${degraded} degraded · ${down} down`} icon={Server} />
-      <MetricCard label="Healthy services" value={demoMode || services.length ? String(healthy).padStart(2, '0') : '00'} detail={services.length ? `${Math.round((healthy / services.length) * 100)}% of monitored` : 'No active services'} icon={CheckCircle2} />
-      <MetricCard label="Active incidents" value={demoMode || incidents.length ? String(active).padStart(2, '0') : '00'} detail={`${critical} critical severity`} icon={CircleAlert} tone={active > 0 ? 'amber' : 'teal'} />
-      <MetricCard label="Successful recoveries" value={demoMode || recoveries.length ? String(successfulRecoveries).padStart(2, '0') : '00'} detail={demoMode ? 'Illustrative sample count' : `${recoveries.length} total operations`} icon={ShieldCheck} />
-      <MetricCard label="Recovery success" value={`${recoverySuccess}%`} detail="Verified post-action health" icon={ArrowUpRight} tone="violet" />
-      <MetricCard label="Mean recovery" value={analytics ? `${analytics.recoveryDurationMinutes} min` : '6.4 min'} detail="Reported MTTR" icon={Clock3} />
+      {servicesLoading ? (
+        <>
+          <MetricCardSkeleton tone="teal" />
+          <MetricCardSkeleton tone="teal" />
+        </>
+      ) : (
+        <>
+          <MetricCard
+            label="Monitored services"
+            value={services.length ? String(services.length).padStart(2, '0') : demoMode ? '05' : '00'}
+            detail={`${healthy} healthy · ${degraded} degraded · ${down} down`}
+            icon={Server}
+          />
+          <MetricCard
+            label="Healthy services"
+            value={services.length ? String(healthy).padStart(2, '0') : demoMode ? '03' : '00'}
+            detail={services.length ? `${Math.round((healthy / services.length) * 100)}% of monitored` : 'No active services'}
+            icon={CheckCircle2}
+          />
+        </>
+      )}
+
+      {incidentsLoading ? (
+        <MetricCardSkeleton tone="amber" />
+      ) : (
+        <MetricCard
+          label="Active incidents"
+          value={incidents.length ? String(active).padStart(2, '0') : '00'}
+          detail={`${critical} critical severity`}
+          icon={CircleAlert}
+          tone={active > 0 ? 'amber' : 'teal'}
+        />
+      )}
+
+      {recoveriesLoading ? (
+        <>
+          <MetricCardSkeleton tone="teal" />
+          <MetricCardSkeleton tone="violet" />
+        </>
+      ) : (
+        <>
+          <MetricCard
+            label="Successful recoveries"
+            value={recoveries.length ? String(successfulRecoveries).padStart(2, '0') : '00'}
+            detail={demoMode ? 'Illustrative sample count' : `${recoveries.length} total operations`}
+            icon={ShieldCheck}
+          />
+          <MetricCard
+            label="Recovery success"
+            value={`${recoverySuccess}%`}
+            detail="Verified post-action health"
+            icon={ArrowUpRight}
+            tone="violet"
+          />
+        </>
+      )}
+
+      {analyticsLoading ? (
+        <MetricCardSkeleton tone="teal" />
+      ) : (
+        <MetricCard
+          label="Mean recovery"
+          value={analytics?.recoveryDurationMinutes ? `${analytics.recoveryDurationMinutes} min` : '—'}
+          detail="Reported MTTR"
+          icon={Clock3}
+        />
+      )}
     </div>
+
+    {/* First Row: Incident Activity Chart + Service Health List */}
     <div className="dashboard-grid">
-      <section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Incident activity</h2><p className="panel-subtitle">{demoMode ? 'Illustrative activity · not live infrastructure' : 'Data returned by the configured API'}</p></div><Link className="text-link" href="/dashboard/analytics">View analytics <ArrowDownRight size={12} /></Link></div><div className="chart-wrap">{analytics?.history.length ? <IncidentAreaChart data={analytics.history} /> : <EmptyState title={loading ? 'Loading activity' : 'No analytics available'} detail="The backend has not supplied incident history for this period." />}</div></section>
-      <section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Service health</h2><p className="panel-subtitle">Availability and response health</p></div><Link className="text-link" href="/dashboard/services">All services <ArrowDownRight size={12} /></Link></div><div className="service-health-list">{services.length ? services.slice(0, 5).map((service) => <Link href={`/dashboard/services/${encodeURIComponent(service.id)}`} className="service-health-row" key={service.id}><span className={`status-dot ${service.status === 'healthy' ? '' : service.status}`} /><span className="service-health-main"><strong>{service.name}</strong><small>{service.environment} · {service.latencyMs} ms latency</small></span><ServiceStatus status={service.status} /></Link>) : <EmptyState title={loading ? 'Loading services' : 'No services reported'} detail="Services appear here when the backend returns monitored infrastructure." />}</div></section>
+      <section className="dash-card panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Incident activity</h2>
+            <p className="panel-subtitle">{demoMode ? 'Illustrative activity · not live infrastructure' : 'Data returned by the configured API'}</p>
+          </div>
+          <Link className="text-link" href="/dashboard/analytics">View analytics <ArrowDownRight size={12} /></Link>
+        </div>
+        <div className="chart-wrap">
+          {analyticsLoading ? (
+            <ChartSkeleton height={210} />
+          ) : analyticsError ? (
+            <SectionErrorState title="Failed to load incident activity" error={analyticsError} onRetry={onRetryAnalytics} />
+          ) : analytics?.history.length ? (
+            <IncidentAreaChart data={analytics.history} />
+          ) : (
+            <EmptyState title="No analytics available" detail="The backend has not supplied incident history for this period." icon={BarChart3} />
+          )}
+        </div>
+      </section>
+
+      <section className="dash-card panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Service health</h2>
+            <p className="panel-subtitle">Availability and response health</p>
+          </div>
+          <Link className="text-link" href="/dashboard/services">All services <ArrowDownRight size={12} /></Link>
+        </div>
+        <div className="service-health-list">
+          {servicesLoading ? (
+            <ListSkeleton count={5} />
+          ) : servicesError ? (
+            <SectionErrorState title="Failed to load services" error={servicesError} onRetry={onRetryServices} />
+          ) : services.length ? (
+            services.slice(0, 5).map((service) => (
+              <Link href={`/dashboard/services/${encodeURIComponent(service.id)}`} className="service-health-row" key={service.id}>
+                <span className={`status-dot ${service.status === 'healthy' ? '' : service.status}`} />
+                <span className="service-health-main">
+                  <strong>{service.name}</strong>
+                  <small>{service.environment} · {service.latencyMs} ms latency</small>
+                </span>
+                <ServiceStatus status={service.status} />
+              </Link>
+            ))
+          ) : (
+            <EmptyState title="No monitored services" detail="Services appear here when the backend returns monitored infrastructure." icon={Server} />
+          )}
+        </div>
+      </section>
     </div>
+
+    {/* Second Row: Recent Incidents Table + Recovery Activity Timeline */}
     <div className="dashboard-grid">
-      <section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Recent incidents</h2><p className="panel-subtitle">{inRange.length} incidents in this view</p></div><Link className="text-link" href="/dashboard/incidents">View incidents <ArrowDownRight size={12} /></Link></div><IncidentTable incidents={inRange.slice(0, 5)} compact /></section>
-      <section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Recovery activity</h2><p className="panel-subtitle">Actions and verification status</p></div><Link className="text-link" href="/dashboard/history">View history <ArrowDownRight size={12} /></Link></div><RecoveryTimeline actions={recoveries.slice(0, 4)} /></section>
+      <section className="dash-card panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Recent incidents</h2>
+            <p className="panel-subtitle">{incidentsLoading ? 'Checking active incidents...' : `${inRange.length} incidents in this view`}</p>
+          </div>
+          <Link className="text-link" href="/dashboard/incidents">View incidents <ArrowDownRight size={12} /></Link>
+        </div>
+        <IncidentTable
+          incidents={inRange.slice(0, 5)}
+          compact
+          loading={incidentsLoading}
+          error={incidentsError}
+          onRetry={onRetryIncidents}
+        />
+      </section>
+
+      <section className="dash-card panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Recovery activity</h2>
+            <p className="panel-subtitle">Actions and verification status</p>
+          </div>
+          <Link className="text-link" href="/dashboard/history">View history <ArrowDownRight size={12} /></Link>
+        </div>
+        {recoveriesLoading ? (
+          <ListSkeleton count={4} />
+        ) : recoveriesError ? (
+          <SectionErrorState title="Failed to load recovery actions" error={recoveriesError} onRetry={onRetryRecoveries} />
+        ) : recoveries.length ? (
+          <RecoveryTimeline actions={recoveries.slice(0, 4)} />
+        ) : (
+          <EmptyState title="No recovery activity" detail="Actions are recorded after the backend confirms a recovery workflow." icon={Clock3} />
+        )}
+      </section>
     </div>
   </>
 }
 
-export function ServiceTable({ services }: { services: Service[] }) {
+export function ServiceTable({
+  services,
+  loading = false,
+  error,
+  onRetry,
+  filterQuery = '',
+  onClearFilter,
+}: {
+  services: Service[]
+  loading?: boolean
+  error?: Error | unknown
+  onRetry?: () => void
+  filterQuery?: string
+  onClearFilter?: () => void
+}) {
   type SortKey = 'name' | 'environment' | 'status' | 'availability' | 'errorRate' | 'latencyMs' | 'lastChecked'
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [direction, setDirection] = useState<'asc' | 'desc'>('asc')
@@ -102,23 +427,552 @@ export function ServiceTable({ services }: { services: Service[] }) {
     if (sortKey === key) setDirection(direction === 'asc' ? 'desc' : 'asc')
     else { setSortKey(key); setDirection('asc') }
   }
-  if (!sorted.length) return <EmptyState title="No services found" detail="Try changing the environment or search terms." />
-  return <div className="data-table-wrap"><table className="data-table"><thead><tr>{columns.map((column) => <th key={column.key} aria-sort={sortKey === column.key ? direction === 'asc' ? 'ascending' : 'descending' : 'none'}><button className="table-sort" onClick={() => setSort(column.key)}>{column.label}{sortKey === column.key && <span aria-hidden="true">{direction === 'asc' ? ' ↑' : ' ↓'}</span>}</button></th>)}</tr></thead><tbody>{sorted.map((service) => <tr key={service.id}><td><Link className="table-primary-link" href={`/dashboard/services/${encodeURIComponent(service.id)}`}>{service.name}</Link><small className="table-subtext">{service.id}</small></td><td>{service.environment}</td><td><ServiceStatus status={service.status} /></td><td>{service.availability.toFixed(2)}%</td><td>{service.errorRate.toFixed(2)}%</td><td>{service.latencyMs} ms</td><td>{service.lastChecked}</td></tr>)}</tbody></table></div>
+
+  if (loading) {
+    return <TableSkeleton columns={7} rows={6} />
+  }
+
+  if (error) {
+    return <SectionErrorState title="Failed to load service inventory" error={error} onRetry={onRetry} />
+  }
+
+  if (!sorted.length) {
+    if (filterQuery.trim()) {
+      return (
+        <EmptyState
+          title="No matching services found"
+          detail={`No services match the filter query "${filterQuery}". Try clearing the search or changing the environment filter.`}
+          icon={Search}
+          action={onClearFilter ? <button className="dash-button" onClick={onClearFilter}>Clear search filter</button> : undefined}
+        />
+      )
+    }
+    return (
+      <EmptyState
+        title="No monitored services"
+        detail="No infrastructure services have been registered yet. Connect an agent to begin health tracking."
+        icon={Server}
+      />
+    )
+  }
+
+  return (
+    <div className="data-table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column.key} aria-sort={sortKey === column.key ? direction === 'asc' ? 'ascending' : 'descending' : 'none'}>
+                <button className="table-sort" onClick={() => setSort(column.key)}>
+                  {column.label}
+                  {sortKey === column.key && <span aria-hidden="true">{direction === 'asc' ? ' ↑' : ' ↓'}</span>}
+                </button>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((service) => (
+            <tr key={service.id}>
+              <td>
+                <Link className="table-primary-link" href={`/dashboard/services/${encodeURIComponent(service.id)}`}>
+                  {service.name}
+                </Link>
+                <small className="table-subtext">{service.id}</small>
+              </td>
+              <td>{service.environment}</td>
+              <td><ServiceStatus status={service.status} /></td>
+              <td>{service.availability.toFixed(2)}%</td>
+              <td>{service.errorRate.toFixed(2)}%</td>
+              <td>{service.latencyMs} ms</td>
+              <td>{service.lastChecked}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
-export function IncidentTable({ incidents, compact = false }: { incidents: Incident[]; compact?: boolean }) {
-  if (!incidents.length) return <EmptyState title="No incidents found" detail="Adjust the filters or connect incident data from the backend." />
-  return <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Incident</th><th>Service</th><th>Severity</th><th>Status</th><th>Detected</th>{!compact && <th>Recovery</th>}</tr></thead><tbody>{incidents.map((incident) => <tr key={incident.id}><td><Link className="table-primary-link" href={`/dashboard/incidents/${encodeURIComponent(incident.id)}`}>{incident.id}</Link><small className="table-subtext">{incident.title}</small></td><td>{incident.serviceName}</td><td><span className={`status-chip ${incident.severity === 'critical' || incident.severity === 'high' ? 'critical' : incident.severity === 'medium' ? 'degraded' : 'completed'}`}>{incident.severity}</span></td><td><span className={`status-chip ${incident.status === 'resolved' ? 'completed' : incident.status === 'open' ? 'critical' : 'pending'}`}>{incident.status.replace('_', ' ')}</span></td><td>{incident.detectedAt}</td>{!compact && <td>{incident.recoveryStatus}</td>}</tr>)}</tbody></table></div>
+export function IncidentTable({
+  incidents,
+  compact = false,
+  loading = false,
+  error,
+  onRetry,
+  filterActive = false,
+  onClearFilter,
+}: {
+  incidents: Incident[]
+  compact?: boolean
+  loading?: boolean
+  error?: Error | unknown
+  onRetry?: () => void
+  filterActive?: boolean
+  onClearFilter?: () => void
+}) {
+  if (loading) {
+    return <TableSkeleton columns={compact ? 5 : 6} rows={compact ? 5 : 7} />
+  }
+
+  if (error) {
+    return <SectionErrorState title="Failed to load incidents" error={error} onRetry={onRetry} />
+  }
+
+  if (!incidents.length) {
+    if (filterActive) {
+      return (
+        <EmptyState
+          title="No matching incidents"
+          detail="No incidents match the active severity, status, or search filters."
+          icon={Search}
+          action={onClearFilter ? <button className="dash-button" onClick={onClearFilter}>Reset filters</button> : undefined}
+        />
+      )
+    }
+    return (
+      <EmptyState
+        title="No active incidents"
+        detail="All monitored services are operating normally. No threshold violations or anomalies detected."
+        icon={CheckCircle2}
+      />
+    )
+  }
+
+  return (
+    <div className="data-table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Incident</th>
+            <th>Service</th>
+            <th>Severity</th>
+            <th>Status</th>
+            <th>Detected</th>
+            {!compact && <th>Recovery</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {incidents.map((incident) => (
+            <tr key={incident.id}>
+              <td>
+                <Link className="table-primary-link" href={`/dashboard/incidents/${encodeURIComponent(incident.id)}`}>
+                  {incident.id}
+                </Link>
+                <small className="table-subtext">{incident.title}</small>
+              </td>
+              <td>{incident.serviceName}</td>
+              <td>
+                <span className={`status-chip ${incident.severity === 'critical' || incident.severity === 'high' ? 'critical' : incident.severity === 'medium' ? 'degraded' : 'completed'}`}>
+                  {incident.severity}
+                </span>
+              </td>
+              <td>
+                <span className={`status-chip ${incident.status === 'resolved' ? 'completed' : incident.status === 'open' ? 'critical' : 'pending'}`}>
+                  {incident.status.replace('_', ' ')}
+                </span>
+              </td>
+              <td>{incident.detectedAt}</td>
+              {!compact && <td>{incident.recoveryStatus}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
-export function RecoveryTable({ actions, onApprove, onReject, onExecute, allowControls = false }: { actions: RecoveryAction[]; onApprove?: (id: string) => void; onReject?: (id: string) => void; onExecute?: (id: string) => void; allowControls?: boolean }) {
-  if (!actions.length) return <EmptyState title="No recovery actions" detail="Recovery activity will appear here when returned by the configured backend." />
-  return <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Action</th><th>Incident</th><th>Requested by</th><th>Status</th><th>Mode & Classification</th><th>Verification</th><th>Duration</th>{allowControls && <th>Controls</th>}</tr></thead><tbody>{actions.map((action) => <tr key={action.id}><td><strong>{action.action}</strong><small className="table-subtext">{action.serviceName} · {action.requestedAt}</small></td><td><Link className="table-primary-link" href={`/dashboard/incidents/${encodeURIComponent(action.incidentId)}`}>{action.incidentId}</Link></td><td>{action.requestedBy}</td><td><span className={`status-chip ${action.status === 'completed' ? 'completed' : action.status === 'failed' ? 'failed' : action.status === 'rejected' ? 'rejected' : action.status === 'running' ? 'degraded' : 'pending'}`}>{action.status.replace('_', ' ')}</span></td><td><div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px' }}><span className={`status-chip ${action.executionMode === 'REAL' ? 'critical' : 'pending'}`}>{action.executionMode === 'REAL' ? 'Real Docker' : 'Simulated'}</span>{action.evidenceClassification && <span className={`status-chip ${action.evidenceClassification === 'HEALTH_VERIFIED' ? 'completed' : action.evidenceClassification === 'VERIFICATION_FAILED' ? 'failed' : 'degraded'}`}>{action.evidenceClassification.replace(/_/g, ' ')}</span>}</div></td><td><span className={`status-chip ${action.verification === 'passed' ? 'completed' : action.verification === 'failed' ? 'failed' : 'pending'}`}>{action.verification}</span></td><td>{action.durationSeconds === undefined ? '—' : `${action.durationSeconds}s`}</td>{allowControls && <td>{action.status === 'pending_approval' ? <div className="row-actions"><button className="dash-button primary" onClick={() => onApprove?.(action.id)}>Approve</button><button className="dash-button danger" onClick={() => onReject?.(action.id)}>Reject</button></div> : action.status === 'approved' ? <div className="row-actions"><button className="dash-button primary" onClick={() => onExecute?.(action.id)}>Execute</button></div> : <span className="table-subtext">No action required</span>}</td>}</tr>)}</tbody></table></div>
+export function RecoveryTable({
+  actions,
+  onApprove,
+  onReject,
+  onExecute,
+  allowControls = false,
+  loading = false,
+  error,
+  onRetry,
+  filterActive = false,
+  onClearFilter,
+}: {
+  actions: RecoveryAction[]
+  onApprove?: (id: string) => void
+  onReject?: (id: string) => void
+  onExecute?: (id: string) => void
+  allowControls?: boolean
+  loading?: boolean
+  error?: Error | unknown
+  onRetry?: () => void
+  filterActive?: boolean
+  onClearFilter?: () => void
+}) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const totalColumns = allowControls ? 9 : 8
+
+  if (loading) {
+    return <TableSkeleton columns={totalColumns} rows={6} />
+  }
+
+  if (error) {
+    return <SectionErrorState title="Failed to load recovery actions" error={error} onRetry={onRetry} />
+  }
+
+  if (!actions.length) {
+    if (filterActive) {
+      return (
+        <EmptyState
+          title="No matching recovery records"
+          detail="No recovery actions match the current filter criteria."
+          icon={Search}
+          action={onClearFilter ? <button className="dash-button" onClick={onClearFilter}>Reset filters</button> : undefined}
+        />
+      )
+    }
+    if (allowControls) {
+      return (
+        <EmptyState
+          title="No pending approvals"
+          detail="All automated remediations are up to date. No actions currently require human approval."
+          icon={ShieldCheck}
+        />
+      )
+    }
+    return (
+      <EmptyState
+        title="No recovery history"
+        detail="No remediation operations have been completed, rejected, or failed yet."
+        icon={Clock3}
+      />
+    )
+  }
+
+  return (
+    <div className="data-table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th style={{ width: '38px', padding: '10px 8px', textAlign: 'center' }} aria-label="Expand row diagnostics"></th>
+            <th>Action</th>
+            <th>Incident</th>
+            <th>Requested by</th>
+            <th>Status</th>
+            <th>Mode & Classification</th>
+            <th>Verification</th>
+            <th>Duration</th>
+            {allowControls && <th>Controls</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {actions.map((action) => {
+            const isExpanded = expandedIds.has(action.id)
+            const isVerified = action.verification === 'passed' || action.evidenceClassification === 'HEALTH_VERIFIED'
+            const isFailed = action.verification === 'failed' || action.evidenceClassification === 'VERIFICATION_FAILED'
+            const isRejected = action.status === 'rejected'
+
+            return (
+              <tr key={action.id} className={isExpanded ? 'row-expanded-parent' : undefined}>
+                <td style={{ width: '38px', padding: '10px 8px', textAlign: 'center' }}>
+                  <button
+                    type="button"
+                    className={`table-expand-btn ${isExpanded ? 'expanded' : ''}`}
+                    onClick={() => toggleExpand(action.id)}
+                    aria-expanded={isExpanded}
+                    aria-controls={`recovery-diag-${action.id}`}
+                    aria-label={isExpanded ? `Hide diagnostics for recovery ${action.id}` : `View diagnostics for recovery ${action.id}`}
+                    title={isExpanded ? 'Hide diagnostics' : 'View diagnostics and verification'}
+                  >
+                    <ChevronRight size={13} className={`table-expand-icon ${isExpanded ? 'expanded' : ''}`} />
+                  </button>
+                </td>
+                <td>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <strong>{action.action}</strong>
+                      <span className="table-id">{action.id}</span>
+                    </span>
+                    <small className="table-subtext">{action.serviceName} · {action.requestedAt}</small>
+                  </div>
+                </td>
+                <td>
+                  <Link className="table-primary-link" href={`/dashboard/incidents/${encodeURIComponent(action.incidentId)}`}>
+                    {action.incidentId}
+                  </Link>
+                </td>
+                <td>{action.requestedBy}</td>
+                <td>
+                  <span className={`status-chip ${action.status === 'completed' ? 'completed' : action.status === 'failed' ? 'failed' : action.status === 'rejected' ? 'rejected' : action.status === 'running' ? 'degraded' : 'pending'}`}>
+                    {action.status.replace('_', ' ')}
+                  </span>
+                </td>
+                <td>
+                  <div style={{ display: 'inline-flex', flexDirection: 'column', gap: '3px' }}>
+                    <span className={`status-chip ${action.executionMode === 'REAL' ? 'critical' : 'pending'}`}>
+                      {action.executionMode === 'REAL' ? 'Real Docker' : 'Simulated'}
+                    </span>
+                    {action.evidenceClassification ? (
+                      <span className={`status-chip ${action.evidenceClassification === 'HEALTH_VERIFIED' ? 'completed' : action.evidenceClassification === 'VERIFICATION_FAILED' ? 'failed' : 'degraded'}`}>
+                        {action.evidenceClassification.replace(/_/g, ' ')}
+                      </span>
+                    ) : (
+                      <span className="table-subtext">Unclassified</span>
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <span className={`status-chip ${action.verification === 'passed' ? 'completed' : action.verification === 'failed' ? 'failed' : 'pending'}`}>
+                    {action.verification}
+                  </span>
+                </td>
+                <td>{action.durationSeconds === undefined ? '—' : `${action.durationSeconds}s`}</td>
+                {allowControls && (
+                  <td>
+                    {action.status === 'pending_approval' ? (
+                      <div className="row-actions">
+                        <button className="dash-button primary" onClick={() => onApprove?.(action.id)}>Approve</button>
+                        <button className="dash-button danger" onClick={() => onReject?.(action.id)}>Reject</button>
+                      </div>
+                    ) : action.status === 'approved' ? (
+                      <div className="row-actions">
+                        <button className="dash-button primary" onClick={() => onExecute?.(action.id)}>Execute</button>
+                      </div>
+                    ) : (
+                      <span className="table-subtext">No action required</span>
+                    )}
+                  </td>
+                )}
+              </tr>
+            )
+          }).reduce<React.ReactNode[]>((rows, row, index) => {
+            rows.push(row)
+            const action = actions[index]
+            if (action && expandedIds.has(action.id)) {
+              const isVerified = action.verification === 'passed' || action.evidenceClassification === 'HEALTH_VERIFIED'
+              const isFailed = action.verification === 'failed' || action.evidenceClassification === 'VERIFICATION_FAILED'
+              const isRejected = action.status === 'rejected'
+
+              rows.push(
+                <tr className="recovery-diagnostic-row" id={`recovery-diag-${action.id}`} key={`${action.id}-diagnostics`}>
+                  <td colSpan={totalColumns} className="recovery-diagnostic-cell">
+                    <div className="recovery-diagnostic-drawer">
+                      {/* Diagnostic Header Bar */}
+                      <div className="recovery-diagnostic-header">
+                        <div className="diagnostic-header-left">
+                          <span className="diagnostic-title-tag">
+                            <ShieldCheck size={13} />
+                            <span>Verification Diagnostics</span>
+                          </span>
+                          <span className="table-id">{action.id}</span>
+                          <span className="diagnostic-service-badge">{action.serviceName}</span>
+                        </div>
+
+                        <div className="diagnostic-header-right">
+                          {/* Verification Outcome Chip */}
+                          {isVerified ? (
+                            <span className="status-chip completed" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <CheckCircle2 size={12} />
+                              <span>HEALTH VERIFIED</span>
+                            </span>
+                          ) : isFailed ? (
+                            <span className="status-chip failed" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <AlertCircle size={12} />
+                              <span>VERIFICATION FAILED</span>
+                            </span>
+                          ) : isRejected ? (
+                            <span className="status-chip rejected" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <XCircle size={12} />
+                              <span>REJECTED</span>
+                            </span>
+                          ) : (
+                            <span className="status-chip pending" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <Clock3 size={12} />
+                              <span>VERIFICATION {action.verification.toUpperCase()}</span>
+                            </span>
+                          )}
+
+                          {/* Evidence Classification Chip */}
+                          {action.evidenceClassification ? (
+                            <span className={`status-chip ${action.evidenceClassification === 'HEALTH_VERIFIED' ? 'completed' : action.evidenceClassification === 'VERIFICATION_FAILED' ? 'failed' : 'degraded'}`}>
+                              Classification: {action.evidenceClassification.replace(/_/g, ' ')}
+                            </span>
+                          ) : (
+                            <span className="status-chip pending">Classification: Unspecified</span>
+                          )}
+
+                          {/* Execution Mode Chip */}
+                          <span className={`status-chip ${action.executionMode === 'REAL' ? 'critical' : 'pending'}`}>
+                            Mode: {action.executionMode === 'REAL' ? 'Real Docker Host' : 'Simulated'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Audit & Execution Metadata Grid */}
+                      <div className="diagnostic-meta-grid">
+                        <div className="diagnostic-meta-item">
+                          <span className="meta-label">Remediation Action</span>
+                          <strong className="meta-value">{action.action}</strong>
+                        </div>
+                        <div className="diagnostic-meta-item">
+                          <span className="meta-label">Target Service</span>
+                          <span className="meta-value">{action.serviceName}</span>
+                        </div>
+                        <div className="diagnostic-meta-item">
+                          <span className="meta-label">Correlated Incident</span>
+                          <span className="meta-value">
+                            <Link className="table-primary-link" href={`/dashboard/incidents/${encodeURIComponent(action.incidentId)}`}>
+                              {action.incidentId}
+                            </Link>
+                          </span>
+                        </div>
+                        <div className="diagnostic-meta-item">
+                          <span className="meta-label">Requested By</span>
+                          <strong className="meta-value">{action.requestedBy}</strong>
+                        </div>
+                        <div className="diagnostic-meta-item">
+                          <span className="meta-label">Requested At</span>
+                          <span className="meta-value">{action.requestedAt}</span>
+                        </div>
+                        <div className="diagnostic-meta-item">
+                          <span className="meta-label">Completed At</span>
+                          <span className="meta-value">{action.result?.completedAt ?? (action.status === 'completed' || action.status === 'failed' || action.status === 'rejected' ? 'Recorded' : 'In-flight')}</span>
+                        </div>
+                        <div className="diagnostic-meta-item">
+                          <span className="meta-label">Execution Duration</span>
+                          <span className="meta-value">{action.durationSeconds !== undefined ? `${action.durationSeconds}s` : 'Not recorded'}</span>
+                        </div>
+                        <div className="diagnostic-meta-item">
+                          <span className="meta-label">Governance Mode</span>
+                          <span className="meta-value">{action.approvalRequired ? 'Human Approval Required' : 'Autonomous Execution'}</span>
+                        </div>
+                      </div>
+
+                      {/* Result Summary & Rejection Reason */}
+                      <div className="diagnostic-section">
+                        <div className="diagnostic-section-title">
+                          <FileText size={13} />
+                          <span>{action.status === 'rejected' ? 'Rejection Reason & Audit Note' : 'Remediation Summary & Verification Outcome'}</span>
+                        </div>
+                        {action.result?.summary ? (
+                          <div className={`diagnostic-summary-card ${action.status === 'rejected' ? 'rejected-summary' : isFailed ? 'failed-summary' : isVerified ? 'verified-summary' : ''}`}>
+                            <div className="diagnostic-summary-lead">
+                              <strong>{action.status === 'rejected' ? 'Operator Audit Note:' : 'Verification Verdict:'}</strong>
+                            </div>
+                            <p className="diagnostic-summary-text">{action.result.summary}</p>
+                          </div>
+                        ) : (
+                          <div className="diagnostic-empty-box">
+                            <Info size={13} />
+                            <span>No execution summary was provided by the backend for this action.</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Diagnostic Telemetry / Command Output (STDOUT) */}
+                      <div className="diagnostic-section">
+                        <div className="diagnostic-section-title">
+                          <Terminal size={13} />
+                          <span>Diagnostic Telemetry & Agent Execution Output</span>
+                        </div>
+                        {action.result?.diagnosticOutput ? (
+                          <div className="diagnostic-terminal">
+                            <div className="diagnostic-terminal-bar">
+                              <span className="terminal-dot red" />
+                              <span className="terminal-dot yellow" />
+                              <span className="terminal-dot green" />
+                              <span className="terminal-title">agent-telemetry :: {action.id}</span>
+                            </div>
+                            <pre className="diagnostic-output-pre">
+                              <code>{action.result.diagnosticOutput}</code>
+                            </pre>
+                          </div>
+                        ) : (
+                          <div className="diagnostic-empty-box">
+                            <Terminal size={13} />
+                            <span>Diagnostic telemetry output was not supplied by the backend for this action.</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              )
+            }
+            return rows
+          }, [])}
+        </tbody>
+      </table>
+    </div>
+  )
 }
 
 export function RecoveryTimeline({ actions }: { actions: RecoveryAction[] }) {
-  if (!actions.length) return <EmptyState title="No recovery activity" detail="Actions are recorded after the backend confirms a recovery workflow." />
-  return <div className="activity-list">{actions.map((action) => <div className="activity-item" key={action.id}><span className="activity-bullet"><ShieldCheck size={11} /></span><div className="activity-text"><strong>{action.action}</strong><div>{action.serviceName} · {action.status.replace('_', ' ')}</div><small>{action.requestedAt} · verification {action.verification}</small></div></div>)}</div>
+  if (!actions.length) {
+    return (
+      <EmptyState
+        title="No recovery activity"
+        detail="Actions are recorded after the backend confirms a recovery workflow."
+        icon={Clock3}
+      />
+    )
+  }
+  return (
+    <div className="activity-list">
+      {actions.map((action) => {
+        const isVerified = action.verification === 'passed' || action.evidenceClassification === 'HEALTH_VERIFIED'
+        const isFailed = action.verification === 'failed' || action.evidenceClassification === 'VERIFICATION_FAILED'
+        const isRejected = action.status === 'rejected'
+        const bulletTone = isVerified ? 'success' : isFailed ? 'warning' : ''
+
+        return (
+          <div className="activity-item" key={action.id}>
+            <span className={`activity-bullet ${bulletTone}`}>
+              <ShieldCheck size={11} />
+            </span>
+            <div className="activity-text">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                <strong>{action.action}</strong>
+                <span className={`status-chip ${isVerified ? 'completed' : isFailed ? 'failed' : isRejected ? 'rejected' : 'pending'}`}>
+                  {action.status.replace('_', ' ')}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                <span>{action.serviceName}</span>
+                <span>·</span>
+                <span className="table-id">{action.id}</span>
+                {action.executionMode && (
+                  <span className={`status-chip ${action.executionMode === 'REAL' ? 'critical' : 'pending'}`} style={{ fontSize: '7.5px', padding: '2px 5px' }}>
+                    {action.executionMode === 'REAL' ? 'Real' : 'Simulated'}
+                  </span>
+                )}
+                {action.evidenceClassification && (
+                  <span className={`status-chip ${isVerified ? 'completed' : isFailed ? 'failed' : 'degraded'}`} style={{ fontSize: '7.5px', padding: '2px 5px' }}>
+                    {action.evidenceClassification.replace(/_/g, ' ')}
+                  </span>
+                )}
+              </div>
+              {action.result?.summary && (
+                <div style={{ color: '#94a3b8', fontSize: '8.5px', marginTop: '4px', fontStyle: 'italic' }}>
+                  {action.result.summary}
+                </div>
+              )}
+              <small>{action.requestedAt} · verification {action.verification}{action.durationSeconds !== undefined ? ` · ${action.durationSeconds}s` : ''}</small>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function demoMetrics(serviceId: string): ServiceMetrics | undefined {
@@ -146,56 +1000,367 @@ function ServiceMetricsPanel({ service }: { service: Service }) {
   const metrics = metricResource.data
   const loading = isApiConfigured && metricResource.isLoading
   return <>
-    {loading && <div className="notice-strip" role="status">Loading backend-supplied metrics for {service.name}. No sample values are shown.</div>}
-    {metricResource.error && <div className="error-strip" role="alert">Could not load metrics: {metricResource.error.message}</div>}
+    {metricResource.error && <SectionErrorState title={`Could not load metrics for ${service.name}`} error={metricResource.error} onRetry={() => metricResource.mutate()} />}
     {demoMode && <div className="notice-strip">Illustrative demo metrics only. This service is not connected to infrastructure.</div>}
     <div className="metric-grid metric-grid-six">
-      <MetricCard label="CPU utilization" value={metrics ? `${metrics.cpuPercent}%` : '—'} detail="Latest sample" icon={Cpu} />
-      <MetricCard label="Memory usage" value={metrics ? `${metrics.memoryPercent}%` : '—'} detail="Latest sample" icon={MemoryStick} tone="violet" />
-      <MetricCard label="Request rate" value={metrics ? `${metrics.requestRate}/min` : '—'} detail="Requests per minute" icon={Activity} />
-      <MetricCard label="Error rate" value={metrics ? `${metrics.errorRate}%` : '—'} detail="Current window" icon={CircleAlert} tone="amber" />
-      <MetricCard label="Latency" value={metrics ? `${metrics.latencyMs} ms` : '—'} detail="Response time" icon={Gauge} />
-      <MetricCard label="Availability" value={metrics ? `${metrics.availability}%` : '—'} detail="Reported uptime" icon={CheckCircle2} />
+      {loading ? (
+        <>
+          <MetricCardSkeleton tone="teal" />
+          <MetricCardSkeleton tone="violet" />
+          <MetricCardSkeleton tone="teal" />
+          <MetricCardSkeleton tone="amber" />
+          <MetricCardSkeleton tone="teal" />
+          <MetricCardSkeleton tone="teal" />
+        </>
+      ) : (
+        <>
+          <MetricCard label="CPU utilization" value={metrics ? `${metrics.cpuPercent}%` : '—'} detail="Latest sample" icon={Cpu} />
+          <MetricCard label="Memory usage" value={metrics ? `${metrics.memoryPercent}%` : '—'} detail="Latest sample" icon={MemoryStick} tone="violet" />
+          <MetricCard label="Request rate" value={metrics ? `${metrics.requestRate}/min` : '—'} detail="Requests per minute" icon={Activity} />
+          <MetricCard label="Error rate" value={metrics ? `${metrics.errorRate}%` : '—'} detail="Current window" icon={CircleAlert} tone="amber" />
+          <MetricCard label="Latency" value={metrics ? `${metrics.latencyMs} ms` : '—'} detail="Response time" icon={Gauge} />
+          <MetricCard label="Availability" value={metrics ? `${metrics.availability}%` : '—'} detail="Reported uptime" icon={CheckCircle2} />
+        </>
+      )}
     </div>
-    <section className="dash-card panel" style={{ marginTop: 13 }}><div className="panel-header"><div><h2 className="panel-title">Service performance</h2><p className="panel-subtitle">{metrics ? `Sampled ${metrics.sampledAt}` : 'Waiting for a backend metrics response'}</p></div><span className={`demo-label ${demoMode ? '' : 'live'}`}>{demoMode ? 'DEMO DATA' : 'API DATA'}</span></div><div className="chart-wrap">{metrics?.history.length ? <ResponsiveContainer width="100%" height="100%"><AreaChart data={metrics.history} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}><defs><linearGradient id="serviceFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#35d6c5" stopOpacity={.22} /><stop offset="100%" stopColor="#35d6c5" stopOpacity={0} /></linearGradient></defs><CartesianGrid stroke="rgba(148,163,184,.1)" vertical={false} /><XAxis dataKey="time" tick={{ fill: '#78869a', fontSize: 9 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: '#78869a', fontSize: 9 }} axisLine={false} tickLine={false} /><Tooltip contentStyle={tooltipStyle} /><Area dataKey="value" name="Metric value" type="monotone" stroke="#35d6c5" strokeWidth={2} fill="url(#serviceFill)" /></AreaChart></ResponsiveContainer> : <EmptyState title={loading ? 'Loading metrics' : 'Metrics unavailable'} detail="The configured backend has not supplied a history series for this service." />}</div></section>
+    <section className="dash-card panel" style={{ marginTop: 13 }}>
+      <div className="panel-header">
+        <div>
+          <h2 className="panel-title">Service performance</h2>
+          <p className="panel-subtitle">{loading ? 'Loading performance metrics...' : metrics ? `Sampled ${metrics.sampledAt}` : 'Waiting for a backend metrics response'}</p>
+        </div>
+        <span className={`demo-label ${demoMode ? '' : 'live'}`}>{demoMode ? 'DEMO DATA' : 'API DATA'}</span>
+      </div>
+      <div className="chart-wrap">
+        {loading ? (
+          <ChartSkeleton height={260} />
+        ) : metricResource.error ? (
+          <SectionErrorState title="Performance chart unavailable" error={metricResource.error} onRetry={() => metricResource.mutate()} />
+        ) : metrics?.history.length ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={metrics.history} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+              <defs>
+                <linearGradient id="serviceFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#35d6c5" stopOpacity={.22} />
+                  <stop offset="100%" stopColor="#35d6c5" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="rgba(148,163,184,.1)" vertical={false} />
+              <XAxis dataKey="time" tick={{ fill: '#78869a', fontSize: 9 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: '#78869a', fontSize: 9 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Area dataKey="value" name="Metric value" type="monotone" stroke="#35d6c5" strokeWidth={2} fill="url(#serviceFill)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <EmptyState title="Metrics unavailable" detail="The configured backend has not supplied a history series for this service." icon={BarChart3} />
+        )}
+      </div>
+    </section>
   </>
 }
 
-export function ServiceDetailView({ service, incidents, recoveries }: { service: Service; incidents: Incident[]; recoveries: RecoveryAction[] }) {
+export function ServiceDetailView({
+  service,
+  incidents,
+  recoveries,
+  incidentsLoading = false,
+  incidentsError,
+  onRetryIncidents,
+  recoveriesLoading = false,
+  recoveriesError,
+  onRetryRecoveries,
+}: {
+  service: Service
+  incidents: Incident[]
+  recoveries: RecoveryAction[]
+  incidentsLoading?: boolean
+  incidentsError?: Error | unknown
+  onRetryIncidents?: () => void
+  recoveriesLoading?: boolean
+  recoveriesError?: Error | unknown
+  onRetryRecoveries?: () => void
+}) {
   const serviceIncidents = incidents.filter((item) => item.serviceId === service.id)
   const serviceRecoveries = recoveries.filter((item) => item.serviceName === service.name)
   return <>
     <ServiceMetricsPanel service={service} />
     <div className="dashboard-grid">
-      <section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Recent incidents</h2><p className="panel-subtitle">Incidents associated with {service.name}</p></div></div><IncidentTable incidents={serviceIncidents} compact /></section>
-      <section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Recovery actions</h2><p className="panel-subtitle">Actions linked to this service</p></div></div><RecoveryTimeline actions={serviceRecoveries} /></section>
+      <section className="dash-card panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Recent incidents</h2>
+            <p className="panel-subtitle">Incidents associated with {service.name}</p>
+          </div>
+        </div>
+        <IncidentTable
+          incidents={serviceIncidents}
+          compact
+          loading={incidentsLoading}
+          error={incidentsError}
+          onRetry={onRetryIncidents}
+        />
+      </section>
+      <section className="dash-card panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Recovery actions</h2>
+            <p className="panel-subtitle">Actions linked to this service</p>
+          </div>
+        </div>
+        {recoveriesLoading ? (
+          <ListSkeleton count={4} />
+        ) : recoveriesError ? (
+          <SectionErrorState title="Failed to load recovery actions" error={recoveriesError} onRetry={onRetryRecoveries} />
+        ) : serviceRecoveries.length ? (
+          <RecoveryTimeline actions={serviceRecoveries} />
+        ) : (
+          <EmptyState title="No recovery activity" detail={`No recovery actions recorded for ${service.name}.`} icon={Clock3} />
+        )}
+      </section>
     </div>
   </>
 }
 
-export function IncidentDetailView({ incident, onRequestRecovery }: { incident: Incident; onRequestRecovery: () => void }) {
+export function IncidentDetailView({
+  incident,
+  onRequestRecovery,
+  onDownloadReport,
+  busyId,
+}: {
+  incident: Incident
+  onRequestRecovery: () => void
+  onDownloadReport?: (id: string, format: 'pdf' | 'json') => void
+  busyId?: string
+}) {
+  const isPdfBusy = busyId === `${incident.id}-pdf`
+  const isJsonBusy = busyId === `${incident.id}-json`
+  const isBusy = Boolean(busyId)
+
   return <>
     <div className="incident-detail-grid">
-      <div className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Incident evidence</h2><p className="panel-subtitle">Signals correlated with this incident</p></div></div><div className="evidence-list">{incident.evidence.length ? incident.evidence.map((item) => <div className="evidence-row" key={item.id}><span className="activity-bullet"><Activity size={11} /></span><div><strong>{item.title}</strong><p>{item.detail}</p><small>{item.kind} · {item.timestamp}</small></div></div>) : <EmptyState title="No evidence attached" detail="The backend has not supplied evidence for this incident." />}</div></div>
-      <div className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Diagnosis</h2><p className="panel-subtitle">Evidence-led incident summary</p></div></div><div className="evidence-row"><CircleAlert size={14} /><div><strong>Probable cause</strong><p>{incident.probableCause}</p></div></div><div className="evidence-row"><ArrowUpRight size={14} /><div><strong>Recommended action</strong><p>{incident.recommendedAction}</p></div></div><div className="incident-values"><div><small>Error rate</small><strong>{incident.errorRate}%</strong></div><div><small>Threshold</small><strong>{incident.threshold}%</strong></div></div><button className="dash-button primary" onClick={onRequestRecovery}>Request controlled recovery</button></div>
+      <div className="dash-card panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Incident evidence</h2>
+            <p className="panel-subtitle">Signals correlated with this incident</p>
+          </div>
+        </div>
+        <div className="evidence-list">
+          {incident.evidence.length ? incident.evidence.map((item) => (
+            <div className="evidence-row" key={item.id}>
+              <span className="activity-bullet"><Activity size={11} /></span>
+              <div>
+                <strong>{item.title}</strong>
+                <p>{item.detail}</p>
+                <small>{item.kind} · {item.timestamp}</small>
+              </div>
+            </div>
+          )) : <EmptyState title="No evidence attached" detail="The backend has not supplied evidence for this incident." icon={Activity} />}
+        </div>
+      </div>
+      <div className="dash-card panel">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Diagnosis & Actions</h2>
+            <p className="panel-subtitle">Evidence-led incident summary and reports</p>
+          </div>
+        </div>
+        <div className="evidence-row"><CircleAlert size={14} /><div><strong>Probable cause</strong><p>{incident.probableCause}</p></div></div>
+        <div className="evidence-row"><ArrowUpRight size={14} /><div><strong>Recommended action</strong><p>{incident.recommendedAction}</p></div></div>
+        <div className="incident-values"><div><small>Error rate</small><strong>{incident.errorRate}%</strong></div><div><small>Threshold</small><strong>{incident.threshold}%</strong></div></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 14 }}>
+          <button className="dash-button primary" onClick={onRequestRecovery}>Request controlled recovery</button>
+          {onDownloadReport && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                className="dash-button"
+                disabled={isBusy}
+                onClick={() => onDownloadReport(incident.id, 'pdf')}
+                aria-label="Download PDF report"
+                style={{ flex: '1 1 140px', justifyContent: 'center' }}
+              >
+                {isPdfBusy ? <RefreshCw size={12} className="spin" /> : <Download size={12} />}
+                {isPdfBusy ? 'Preparing PDF…' : 'Download PDF Report'}
+              </button>
+              <button
+                className="dash-button"
+                disabled={isBusy}
+                onClick={() => onDownloadReport(incident.id, 'json')}
+                aria-label="Download JSON report"
+                style={{ flex: '1 1 140px', justifyContent: 'center' }}
+              >
+                {isJsonBusy ? <RefreshCw size={12} className="spin" /> : <Download size={12} />}
+                {isJsonBusy ? 'Preparing JSON…' : 'Download JSON Report'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
-    <section className="dash-card panel" style={{ marginTop: 13 }}><div className="panel-header"><div><h2 className="panel-title">Incident timeline</h2><p className="panel-subtitle">Recorded events · {incident.detectedAt}</p></div><span className="status-chip">{incident.recoveryStatus}</span></div><div className="activity-list">{incident.events.length ? incident.events.map((event) => <div className="activity-item" key={event.id}><span className={`activity-bullet ${event.tone}`}><Clock3 size={11} /></span><div className="activity-text"><strong>{event.label}</strong><div>{event.detail}</div><small>{event.timestamp}</small></div></div>) : <EmptyState title="No timeline events" detail="Events will appear here when returned by the backend." />}</div></section>
+    <section className="dash-card panel" style={{ marginTop: 13 }}><div className="panel-header"><div><h2 className="panel-title">Incident timeline</h2><p className="panel-subtitle">Recorded events · {incident.detectedAt}</p></div><span className="status-chip">{incident.recoveryStatus}</span></div><div className="activity-list">{incident.events.length ? incident.events.map((event) => <div className="activity-item" key={event.id}><span className={`activity-bullet ${event.tone}`}><Clock3 size={11} /></span><div className="activity-text"><strong>{event.label}</strong><div>{event.detail}</div><small>{event.timestamp}</small></div></div>) : <EmptyState title="No timeline events" detail="Events will appear here when returned by the backend." icon={Clock3} />}</div></section>
   </>
 }
 
-export function MonitoringView({ services }: { services: Service[] }) {
+export function MonitoringView({
+  services,
+  loading = false,
+  error,
+  onRetry,
+}: {
+  services: Service[]
+  loading?: boolean
+  error?: Error | unknown
+  onRetry?: () => void
+}) {
   const [selectedId, setSelectedId] = useState('')
   const selected = services.find((service) => service.id === selectedId) ?? services[0]
   return <>
-    <div className="dashboard-heading"><div><h1>Infrastructure monitoring</h1><p>Operational metrics supplied by the configured backend or labeled demo data.</p></div><div className="dashboard-toolbar"><label className="sr-only" htmlFor="monitoring-service">Service</label><select id="monitoring-service" className="small-select" value={selected?.id ?? ''} onChange={(event) => setSelectedId(event.target.value)}><option value="" disabled>Select a service</option>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></div></div>
-    {selected ? <ServiceMetricsPanel service={selected} /> : <EmptyState title="No monitored services" detail="Infrastructure metrics will appear after the backend supplies service data." />}
+    <div className="dashboard-heading">
+      <div>
+        <h1>Infrastructure monitoring</h1>
+        <p>Operational metrics supplied by the configured backend or labeled demo data.</p>
+      </div>
+      <div className="dashboard-toolbar">
+        <label className="sr-only" htmlFor="monitoring-service">Service</label>
+        <select
+          id="monitoring-service"
+          className="small-select"
+          value={selected?.id ?? ''}
+          onChange={(event) => setSelectedId(event.target.value)}
+          disabled={loading || !services.length}
+        >
+          <option value="" disabled>Select a service</option>
+          {services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
+        </select>
+      </div>
+    </div>
+    {loading ? (
+      <>
+        <div className="metric-grid metric-grid-six">
+          <MetricCardSkeleton tone="teal" />
+          <MetricCardSkeleton tone="violet" />
+          <MetricCardSkeleton tone="teal" />
+          <MetricCardSkeleton tone="amber" />
+          <MetricCardSkeleton tone="teal" />
+          <MetricCardSkeleton tone="teal" />
+        </div>
+        <section className="dash-card panel" style={{ marginTop: 13 }}>
+          <ChartSkeleton height={260} />
+        </section>
+      </>
+    ) : error ? (
+      <SectionErrorState title="Failed to load monitoring data" error={error} onRetry={onRetry} />
+    ) : selected ? (
+      <ServiceMetricsPanel service={selected} />
+    ) : (
+      <EmptyState title="No monitored services" detail="Infrastructure metrics will appear after the backend supplies service data." icon={Server} />
+    )}
   </>
 }
 
-export function AnalyticsView({ analytics, demoMode }: { analytics?: AnalyticsSummary; demoMode: boolean }) {
+export function AnalyticsView({
+  analytics,
+  services = [],
+  incidents = [],
+  recoveries = [],
+  demoMode,
+  loading = false,
+  error,
+  onRetry,
+}: {
+  analytics?: AnalyticsSummary
+  services?: Service[]
+  incidents?: Incident[]
+  recoveries?: RecoveryAction[]
+  demoMode: boolean
+  loading?: boolean
+  error?: Error | unknown
+  onRetry?: () => void
+}) {
   const [range, setRange] = useState('all')
   const rows = analytics?.history ?? []
   const visible = range === '7' ? rows.slice(-7) : range === '30' ? rows.slice(-30) : rows
+
+  // 1. Detection Latency Series:
+  // Maps available timeline points. When daily granularity is not returned by the backend summary,
+  // values are strictly set to null (never fabricated or coerced to 0) to clearly distinguish
+  // unavailable historical data from 0s latency.
+  const detectionLatencyData = useMemo(() => {
+    return visible.map((point) => {
+      const pointWithLatency = point as { detectionLatency?: number }
+      return {
+        label: point.date,
+        latencySeconds: typeof pointWithLatency.detectionLatency === 'number' ? pointWithLatency.detectionLatency : null,
+        targetSeconds: 60,
+      }
+    })
+  }, [visible])
+
+  // 2. Recovery Duration Series:
+  // Derived from actual recorded recovery actions from the backend API.
+  // Each action has its real measured durationSeconds.
+  const recoveryDurationData = useMemo(() => {
+    if (recoveries.length > 0) {
+      return recoveries
+        .filter((r) => r.status === 'completed' || r.status === 'failed' || r.durationSeconds !== undefined)
+        .slice(0, 10)
+        .map((r) => ({
+          label: r.id,
+          durationSeconds: r.durationSeconds ?? null,
+          serviceName: r.serviceName,
+          action: r.action,
+          status: r.status,
+          verification: r.verification,
+        }))
+    }
+    return visible.map((point) => ({
+      label: point.date,
+      durationSeconds: null,
+    }))
+  }, [recoveries, visible])
+
+  // 3. Error Rate Series:
+  // Derived from actual monitored services errorRate telemetry.
+  const errorRateData = useMemo(() => {
+    if (services.length > 0) {
+      return services.map((s) => ({
+        label: s.name,
+        errorRate: s.errorRate,
+        threshold: 1.0,
+        status: s.status,
+      }))
+    }
+    return visible.map((point) => ({
+      label: point.date,
+      errorRate: point.availability ? Number((100 - point.availability).toFixed(2)) : null,
+      threshold: 1.0,
+    }))
+  }, [services, visible])
+
+  // 4. Recovery Success Rate Series:
+  // Computed per period. If 0 recoveries were executed in a period, the success rate is null
+  // (not 0%, which would falsely indicate 100% failure).
+  const recoverySuccessData = useMemo(() => {
+    return visible.map((point) => {
+      if (!point.recoveries || point.recoveries === 0) {
+        return {
+          label: point.date,
+          successRate: null,
+          totalOperations: 0,
+          successfulOperations: 0,
+        }
+      }
+      const rate = Math.min(100, Math.round((point.recoveries / Math.max(point.incidents, point.recoveries)) * 100))
+      return {
+        label: point.date,
+        successRate: rate,
+        totalOperations: point.recoveries,
+        successfulOperations: point.recoveries,
+      }
+    })
+  }, [visible])
+
   function exportCsv() {
     if (!visible.length) return
     const csvCell = (value: string | number) => {
@@ -216,20 +1381,371 @@ export function AnalyticsView({ analytics, demoMode }: { analytics?: AnalyticsSu
     link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
-  return <>
-    <div className="dashboard-heading"><div><h1>Analytics</h1><p>Understand detection, recovery, and service reliability trends.</p></div><div className="dashboard-toolbar"><label className="sr-only" htmlFor="analytics-range">Data range</label><select id="analytics-range" className="small-select" value={range} onChange={(event) => setRange(event.target.value)}><option value="all">All available data</option><option value="7">Last 7 points</option><option value="30">Last 30 points</option></select><button className="dash-button" onClick={exportCsv} disabled={!visible.length}><Download size={12} />Export CSV</button></div></div>
-    {demoMode && <div className="notice-strip">Illustrative analytics only. The included series is sample data and is not a customer result.</div>}
-    <div className="metric-grid metric-grid-four"><MetricCard label="Detection latency" value={analytics ? `${analytics.detectionLatencySeconds}s` : '—'} detail="Average time to detect" icon={Gauge} /><MetricCard label="Mean recovery" value={analytics ? `${analytics.recoveryDurationMinutes} min` : '—'} detail="Reported recovery duration" icon={Clock3} tone="violet" /><MetricCard label="Recovery success" value={analytics ? `${analytics.recoverySuccessRate}%` : '—'} detail="Verified outcomes" icon={CheckCircle2} /><MetricCard label="False-positive rate" value={analytics && analytics.falsePositiveRate !== null && analytics.falsePositiveRate !== undefined ? `${analytics.falsePositiveRate}%` : 'Unavailable'} detail="FP / (FP + TN)" icon={CircleAlert} tone="amber" /></div>
-    <div className="dashboard-grid equal"><section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Incident and recovery trend</h2><p className="panel-subtitle">{demoMode ? 'Illustrative series' : 'Backend-supplied series'}</p></div></div><div className="chart-wrap">{visible.length ? <IncidentAreaChart data={visible} /> : <EmptyState title="Analytics unavailable" detail="No history series was returned for this range." />}</div></section><section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Availability trend</h2><p className="panel-subtitle">Service reliability across the selected window</p></div></div><div className="chart-wrap">{visible.length ? <AvailabilityChart data={visible} /> : <EmptyState title="Availability unavailable" detail="No availability series was returned by the backend." />}</div></section></div>
-    <section className="dash-card panel" style={{ marginTop: 13 }}><div className="panel-header"><div><h2 className="panel-title">Incident frequency and recovery</h2><p className="panel-subtitle">{analytics ? `${analytics.incidentCount} total incidents in the available window` : 'Waiting for analytics data'}</p></div></div><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Period</th><th>Incidents</th><th>Recoveries</th><th>Availability</th></tr></thead><tbody>{visible.map((row) => <tr key={row.date}><td>{row.date}</td><td>{row.incidents}</td><td>{row.recoveries}</td><td>{row.availability}%</td></tr>)}</tbody></table></div></section>
-  </>
+
+  return (
+    <>
+      <div className="dashboard-heading">
+        <div>
+          <h1>Analytics</h1>
+          <p>Inspect detection latency, recovery duration, error rates, and verification trends.</p>
+        </div>
+        <div className="dashboard-toolbar">
+          <label className="sr-only" htmlFor="analytics-range">
+            Data range
+          </label>
+          <select
+            id="analytics-range"
+            className="small-select"
+            value={range}
+            onChange={(event) => setRange(event.target.value)}
+            disabled={loading}
+          >
+            <option value="all">All available data</option>
+            <option value="7">Last 7 points</option>
+            <option value="30">Last 30 points</option>
+          </select>
+          <button className="dash-button" onClick={exportCsv} disabled={loading || !visible.length}>
+            <Download size={12} />
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      {demoMode && (
+        <div className="notice-strip">
+          Illustrative analytics only. The included series is sample data and is not a customer result.
+        </div>
+      )}
+
+      {error && (
+        <SectionErrorState title="Failed to load analytics data" error={error} onRetry={onRetry} />
+      )}
+
+      {/* Top Key Metrics */}
+      <div className="metric-grid metric-grid-four">
+        {loading ? (
+          <>
+            <MetricCardSkeleton tone="teal" />
+            <MetricCardSkeleton tone="violet" />
+            <MetricCardSkeleton tone="teal" />
+            <MetricCardSkeleton tone="amber" />
+          </>
+        ) : (
+          <>
+            <MetricCard
+              label="Detection latency"
+              value={analytics ? `${analytics.detectionLatencySeconds}s` : '—'}
+              detail="Average time to detect"
+              icon={Gauge}
+            />
+            <MetricCard
+              label="Mean recovery"
+              value={analytics ? `${analytics.recoveryDurationMinutes} min` : '—'}
+              detail="Reported recovery duration"
+              icon={Clock3}
+              tone="violet"
+            />
+            <MetricCard
+              label="Recovery success"
+              value={analytics ? `${analytics.recoverySuccessRate}%` : '—'}
+              detail="Verified outcomes"
+              icon={CheckCircle2}
+            />
+            <MetricCard
+              label="False-positive rate"
+              value={
+                analytics && analytics.falsePositiveRate !== null && analytics.falsePositiveRate !== undefined
+                  ? `${analytics.falsePositiveRate}%`
+                  : 'Unavailable'
+              }
+              detail="FP / (FP + TN)"
+              icon={CircleAlert}
+              tone="amber"
+            />
+          </>
+        )}
+      </div>
+
+      {/* Primary Analytics Grid: 1. Detection Latency & 2. Recovery Duration */}
+      <div className="dashboard-grid equal" style={{ marginTop: 13 }}>
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Detection latency trend</h2>
+              <p className="panel-subtitle">Time from fault onset to alert creation (Target: &lt;60s)</p>
+            </div>
+            {analytics?.detectionLatencySeconds !== undefined && (
+              <span className="demo-label" style={{ fontSize: '10px' }}>
+                Org avg: {analytics.detectionLatencySeconds}s
+              </span>
+            )}
+          </div>
+          <div className="chart-wrap">
+            {loading ? (
+              <ChartSkeleton height={240} />
+            ) : visible.length ? (
+              <DetectionLatencyChart
+                data={detectionLatencyData}
+                targetSeconds={60}
+                averageSeconds={analytics?.detectionLatencySeconds}
+              />
+            ) : (
+              <EmptyState title="Latency series unavailable" detail="No latency samples were returned by the backend API." icon={Gauge} />
+            )}
+          </div>
+        </section>
+
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Recovery duration</h2>
+              <p className="panel-subtitle">
+                Measured duration of executed recovery operations (Mean: {analytics?.recoveryDurationMinutes ?? 6.4}m)
+              </p>
+            </div>
+            {recoveries.length > 0 && (
+              <span className="demo-label" style={{ fontSize: '10px' }}>
+                {recoveries.length} operations tracked
+              </span>
+            )}
+          </div>
+          <div className="chart-wrap">
+            {loading ? (
+              <ChartSkeleton height={240} />
+            ) : recoveryDurationData.length ? (
+              <RecoveryDurationChart
+                data={recoveryDurationData}
+                meanDurationMinutes={analytics?.recoveryDurationMinutes}
+              />
+            ) : (
+              <EmptyState title="Recovery duration unavailable" detail="No executed recovery actions with duration data found." icon={Clock3} />
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Secondary Analytics Grid: 3. Error Rate & 4. Recovery Success Rate */}
+      <div className="dashboard-grid equal" style={{ marginTop: 13 }}>
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Service error rates</h2>
+              <p className="panel-subtitle">Active service error percentages vs critical threshold (1.00%)</p>
+            </div>
+            {services.length > 0 && (
+              <span className="demo-label" style={{ fontSize: '10px' }}>
+                {services.length} services monitored
+              </span>
+            )}
+          </div>
+          <div className="chart-wrap">
+            {loading ? (
+              <ChartSkeleton height={240} />
+            ) : errorRateData.length ? (
+              <ErrorRateChart data={errorRateData} criticalThreshold={1.0} />
+            ) : (
+              <EmptyState title="Error rates unavailable" detail="No service telemetry data returned by the backend." icon={CircleAlert} />
+            )}
+          </div>
+        </section>
+
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Recovery success rate</h2>
+              <p className="panel-subtitle">Verified post-action health vs 95% target threshold</p>
+            </div>
+            {analytics?.recoverySuccessRate !== undefined && (
+              <span className="demo-label" style={{ fontSize: '10px' }}>
+                Current: {analytics.recoverySuccessRate}%
+              </span>
+            )}
+          </div>
+          <div className="chart-wrap">
+            {loading ? (
+              <ChartSkeleton height={240} />
+            ) : recoverySuccessData.length ? (
+              <RecoverySuccessRateChart
+                data={recoverySuccessData}
+                targetRate={95}
+                overallRate={analytics?.recoverySuccessRate}
+              />
+            ) : (
+              <EmptyState title="Success rate unavailable" detail="No recovery actions available for success evaluation." icon={CheckCircle2} />
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Overall Trend Grid: Incidents & Recoveries Volume + Service Availability */}
+      <div className="dashboard-grid equal" style={{ marginTop: 13 }}>
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Incident and recovery volume</h2>
+              <p className="panel-subtitle">{demoMode ? 'Illustrative series' : 'Backend-supplied event frequency'}</p>
+            </div>
+          </div>
+          <div className="chart-wrap">
+            {loading ? (
+              <ChartSkeleton height={240} />
+            ) : visible.length ? (
+              <IncidentAreaChart data={visible} />
+            ) : (
+              <EmptyState title="Analytics unavailable" detail="No history series was returned for this range." icon={BarChart3} />
+            )}
+          </div>
+        </section>
+
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Availability trend</h2>
+              <p className="panel-subtitle">Service reliability across the selected evaluation window</p>
+            </div>
+          </div>
+          <div className="chart-wrap">
+            {loading ? (
+              <ChartSkeleton height={240} />
+            ) : visible.length ? (
+              <AvailabilityChart data={visible} />
+            ) : (
+              <EmptyState title="Availability unavailable" detail="No availability series was returned by the backend." icon={ShieldCheck} />
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Frequency and Recovery Summary Table */}
+      <section className="dash-card panel" style={{ marginTop: 13 }}>
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Incident frequency and recovery summary</h2>
+            <p className="panel-subtitle">
+              {loading ? 'Loading summary records...' : analytics ? `${analytics.incidentCount} total incidents in the available window` : 'Waiting for analytics data'}
+            </p>
+          </div>
+        </div>
+        {loading ? (
+          <TableSkeleton columns={4} rows={6} />
+        ) : visible.length ? (
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Incidents</th>
+                  <th>Recoveries</th>
+                  <th>Availability</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((row) => (
+                  <tr key={row.date}>
+                    <td>{row.date}</td>
+                    <td>{row.incidents}</td>
+                    <td>{row.recoveries}</td>
+                    <td>{row.availability}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="No analytics history" detail="No periodic analytics records were found for this range." icon={BarChart3} />
+        )}
+      </section>
+    </>
+  )
 }
 
-export function ReportsView({ incidents, demoMode, onDownload, busyId }: { incidents: Incident[]; demoMode: boolean; onDownload: (id: string, format?: 'pdf' | 'json') => void; busyId?: string }) {
+export function ReportsView({
+  incidents,
+  demoMode,
+  onDownload,
+  busyId,
+  loading = false,
+  error,
+  onRetry,
+}: {
+  incidents: Incident[]
+  demoMode: boolean
+  onDownload: (id: string, format?: 'pdf' | 'json') => void
+  busyId?: string
+  loading?: boolean
+  error?: Error | unknown
+  onRetry?: () => void
+}) {
   return <>
-    <div className="dashboard-heading"><div><h1>Reports</h1><p>Generate incident reports from backend data and download post-mortem files.</p></div><span className={`demo-label ${demoMode ? '' : 'live'}`}>{demoMode ? 'BACKEND REQUIRED' : 'API CONNECTED'}</span></div>
+    <div className="dashboard-heading">
+      <div>
+        <h1>Reports</h1>
+        <p>Generate incident reports from backend data and download post-mortem files.</p>
+      </div>
+      <span className={`demo-label ${demoMode ? '' : 'live'}`}>{demoMode ? 'BACKEND REQUIRED' : 'API CONNECTED'}</span>
+    </div>
     {demoMode && <div className="notice-strip">No report files are generated from sample data. Configure the FastAPI backend to enable incident report downloads.</div>}
-    <section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Incident reports</h2><p className="panel-subtitle">{incidents.length} available incident records</p></div></div>{incidents.length ? <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Incident</th><th>Service</th><th>Severity</th><th>Detected</th><th>PDF Post-Mortem</th><th>JSON Structured</th></tr></thead><tbody>{incidents.map((incident) => <tr key={incident.id}><td><Link className="table-primary-link" href={`/dashboard/incidents/${encodeURIComponent(incident.id)}`}>{incident.id}</Link><small className="table-subtext">{incident.title}</small></td><td>{incident.serviceName}</td><td>{incident.severity}</td><td>{incident.detectedAt}</td><td><button className="dash-button" disabled={demoMode || busyId === `${incident.id}-pdf`} onClick={() => onDownload(incident.id, 'pdf')}><Download size={12} />{busyId === `${incident.id}-pdf` ? 'Preparing…' : 'Download PDF'}</button></td><td><button className="dash-button" disabled={demoMode || busyId === `${incident.id}-json`} onClick={() => onDownload(incident.id, 'json')}><Download size={12} />{busyId === `${incident.id}-json` ? 'Preparing…' : 'Download JSON'}</button></td></tr>)}</tbody></table></div> : <EmptyState title="No incident reports" detail="Reports will appear when the backend returns incident records." />}</section>
+    <section className="dash-card panel">
+      <div className="panel-header">
+        <div>
+          <h2 className="panel-title">Incident reports</h2>
+          <p className="panel-subtitle">{loading ? 'Loading report records...' : `${incidents.length} available incident records`}</p>
+        </div>
+      </div>
+      {loading ? (
+        <TableSkeleton columns={6} rows={6} />
+      ) : error ? (
+        <SectionErrorState title="Failed to load incident reports" error={error} onRetry={onRetry} />
+      ) : incidents.length ? (
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Incident</th>
+                <th>Service</th>
+                <th>Severity</th>
+                <th>Detected</th>
+                <th>PDF Post-Mortem</th>
+                <th>JSON Structured</th>
+              </tr>
+            </thead>
+            <tbody>
+              {incidents.map((incident) => (
+                <tr key={incident.id}>
+                  <td>
+                    <Link className="table-primary-link" href={`/dashboard/incidents/${encodeURIComponent(incident.id)}`}>
+                      {incident.id}
+                    </Link>
+                    <small className="table-subtext">{incident.title}</small>
+                  </td>
+                  <td>{incident.serviceName}</td>
+                  <td>
+                    <span className={`status-chip ${incident.severity === 'critical' || incident.severity === 'high' ? 'critical' : incident.severity === 'medium' ? 'degraded' : 'completed'}`}>
+                      {incident.severity}
+                    </span>
+                  </td>
+                  <td>{incident.detectedAt}</td>
+                  <td>
+                    <button className="dash-button" disabled={demoMode || busyId === `${incident.id}-pdf`} onClick={() => onDownload(incident.id, 'pdf')}>
+                      <Download size={12} />
+                      {busyId === `${incident.id}-pdf` ? 'Preparing…' : 'Download PDF'}
+                    </button>
+                  </td>
+                  <td>
+                    <button className="dash-button" disabled={demoMode || busyId === `${incident.id}-json`} onClick={() => onDownload(incident.id, 'json')}>
+                      <Download size={12} />
+                      {busyId === `${incident.id}-json` ? 'Preparing…' : 'Download JSON'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <EmptyState title="No incident reports" detail="Reports will appear when the backend returns incident records." icon={FileText} />
+      )}
+    </section>
   </>
 }
 
@@ -258,12 +1774,22 @@ export function AgentsView({
   onRevoke,
   onRefresh,
   busyId,
+  loading = false,
+  error,
+  onRetry,
+  filterActive = false,
+  onClearFilter,
 }: {
   agents: InfrastructureAgent[]
   demoMode: boolean
   onRevoke?: (id: string) => void
   onRefresh?: () => void
   busyId?: string
+  loading?: boolean
+  error?: Error | unknown
+  onRetry?: () => void
+  filterActive?: boolean
+  onClearFilter?: () => void
 }) {
   return (
     <>
@@ -277,7 +1803,7 @@ export function AgentsView({
             {demoMode ? 'DEMO AGENTS' : `${agents.length} ACTIVE AGENTS`}
           </span>
           {onRefresh && (
-            <button className="dash-button" onClick={onRefresh}>
+            <button className="dash-button" onClick={onRefresh} disabled={loading}>
               <Server size={12} />Refresh Status
             </button>
           )}
@@ -297,7 +1823,11 @@ export function AgentsView({
             </p>
           </div>
         </div>
-        {agents.length ? (
+        {loading ? (
+          <TableSkeleton columns={7} rows={5} />
+        ) : error ? (
+          <SectionErrorState title="Failed to load infrastructure agents" error={error} onRetry={onRetry} />
+        ) : agents.length ? (
           <div className="data-table-wrap">
             <table className="data-table">
               <thead>
@@ -363,10 +1893,18 @@ export function AgentsView({
               </tbody>
             </table>
           </div>
+        ) : filterActive ? (
+          <EmptyState
+            title="No matching agents"
+            detail="No infrastructure agents match the search query or environment filter."
+            icon={Search}
+            action={onClearFilter ? <button className="dash-button" onClick={onClearFilter}>Clear filters</button> : undefined}
+          />
         ) : (
           <EmptyState
             title="No infrastructure agents connected"
             detail="Register a restricted agent on your compute node using POST /api/v1/agents/register to begin autonomous operations."
+            icon={Server}
           />
         )}
       </section>

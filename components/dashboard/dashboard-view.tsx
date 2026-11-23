@@ -5,30 +5,48 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import useSWR from 'swr'
 import type { LucideIcon } from 'lucide-react'
-import { Activity, ArrowDownRight, CheckCircle2, Clock3, RefreshCw, Server, ShieldCheck } from 'lucide-react'
+import { Activity, ArrowDownRight, CheckCircle2, CircleAlert, Clock3, Download, FileText, RefreshCw, Server, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { AnalyticsSummary, Anomaly, Incident, IncidentCorrelationGroup, InfrastructureAgent, IntelligenceOverview, ModelEvaluationMetric, Prediction, PreventiveRecommendation, RecoveryAction, Service, ServiceRisk } from '@/types'
 import { isApiConfigured, isDemoMode } from '@/lib/api/client'
 import { agentsApi, analyticsApi, healthApi, incidentsApi, intelligenceApi, recoveriesApi, servicesApi } from '@/lib/api/resources'
 import { useRealtimeEvents } from '@/lib/api/events'
 import { demoAgents, demoAnalytics, demoAnomalies, demoCorrelations, demoEvaluations, demoIncidents, demoIntelligenceOverview, demoPredictions, demoRecommendations, demoRecoveries, demoRiskScores, demoServices } from '@/lib/demo/mock-data'
 import { useDashboardControls } from '@/components/dashboard/dashboard-shell'
-import { AgentsView, AnalyticsView, IncidentTable, IncidentDetailView, IntelligenceView, MonitoringView, OverviewView, RecoveryTable, ReportsView, ServiceDetailView, ServiceTable, SettingsView } from '@/components/dashboard/data-views'
+import { AgentsView, AnalyticsView, EmptyState, IncidentTable, IncidentDetailView, IntelligenceView, MonitoringView, OverviewView, RecoveryTable, ReportsView, SectionErrorState, ServiceDetailView, ServiceTable, SettingsView } from '@/components/dashboard/data-views'
 import { CanaryReleasesView, IncidentCollaborationPanel, NotificationsView, OperationsTimelineView } from '@/components/dashboard/enterprise-views'
 import { ExperimentsView } from '@/components/dashboard/experiment-views'
 import { ObservabilityCenterView, SecurityCenterView } from '@/components/dashboard/security-views'
+import { ChartSkeleton, ListSkeleton, MetricCardSkeleton, TableSkeleton } from '@/components/ui/skeleton'
 
-type DialogState = { title: string; description: string; confirmLabel?: string; onConfirm?: () => Promise<void> | void }
+type DialogState = {
+  title: string
+  description: string
+  confirmLabel?: string
+  confirmTone?: 'primary' | 'danger'
+  inputPrompt?: {
+    label: string
+    placeholder?: string
+    defaultValue?: string
+    required?: boolean
+    maxLength?: number
+  }
+  onConfirm?: (inputValue?: string) => Promise<void> | void
+}
 
 function ConfirmDialog({ dialog, onClose, busy }: { dialog: DialogState; onClose: () => void; busy: boolean }) {
   const panelRef = useRef<HTMLElement>(null)
   const closeRef = useRef(onClose)
+  const maxLength = dialog.inputPrompt?.maxLength ?? 500
+  const [inputValue, setInputValue] = useState(dialog.inputPrompt?.defaultValue ?? '')
+  const [inputError, setInputError] = useState<string | null>(null)
 
   useEffect(() => { closeRef.current = onClose }, [onClose])
   useEffect(() => {
     const panel = panelRef.current
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const focusable = panel ? Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled)')) : []
-    ;(focusable[0] ?? panel)?.focus()
+    const textInput = panel ? panel.querySelector<HTMLTextAreaElement | HTMLInputElement>('textarea, input') : null
+    const focusable = panel ? Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), textarea, input')) : []
+    ;(textInput ?? focusable[0] ?? panel)?.focus()
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') closeRef.current()
       if (event.key === 'Tab' && focusable.length > 0) {
@@ -45,7 +63,90 @@ function ConfirmDialog({ dialog, onClose, busy }: { dialog: DialogState; onClose
     }
   }, [])
 
-  return <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><section ref={panelRef} tabIndex={-1} className="dialog-card" role="dialog" aria-modal="true" aria-labelledby="dialog-title" aria-describedby="dialog-description"><div className="dialog-icon"><ShieldCheck size={17} /></div><h2 id="dialog-title">{dialog.title}</h2><p id="dialog-description">{dialog.description}</p><div className="dialog-actions"><button className="dash-button" onClick={onClose} disabled={busy}>{dialog.confirmLabel ? 'Cancel' : 'Close'}</button>{dialog.confirmLabel && <button className="dash-button primary" disabled={busy} onClick={async () => { const action = dialog.onConfirm; onClose(); await action?.() }}>{busy ? 'Working…' : dialog.confirmLabel}</button>}</div></section></div>
+  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = event.target.value
+    setInputValue(value)
+    if (value.length > maxLength) {
+      setInputError(`Rejection reason cannot exceed ${maxLength} characters.`)
+    } else if (dialog.inputPrompt?.required && !value.trim()) {
+      setInputError('A reason is required.')
+    } else {
+      setInputError(null)
+    }
+  }
+
+  const isDanger = dialog.confirmTone === 'danger'
+  const isOverLimit = inputValue.length > maxLength
+  const cannotConfirm = busy || isOverLimit || (Boolean(dialog.inputPrompt?.required) && !inputValue.trim())
+
+  const handleConfirm = async () => {
+    if (cannotConfirm) return
+    const action = dialog.onConfirm
+    onClose()
+    await action?.(inputValue)
+  }
+
+  return (
+    <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <section
+        ref={panelRef}
+        tabIndex={-1}
+        className="dialog-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+        aria-describedby="dialog-description"
+      >
+        <div className={`dialog-icon ${isDanger ? 'danger' : ''}`}>
+          {isDanger ? <ShieldAlert size={17} /> : <ShieldCheck size={17} />}
+        </div>
+        <h2 id="dialog-title">{dialog.title}</h2>
+        <p id="dialog-description">{dialog.description}</p>
+
+        {dialog.inputPrompt && (
+          <div className="dialog-input-group">
+            <div className="dialog-input-label-row">
+              <label htmlFor="dialog-rejection-input" className="dialog-input-label">
+                {dialog.inputPrompt.label}
+              </label>
+              <span className={`dialog-char-counter ${isOverLimit ? 'over-limit' : ''}`}>
+                {inputValue.length}/{maxLength}
+              </span>
+            </div>
+            <textarea
+              id="dialog-rejection-input"
+              className={`dialog-textarea ${inputError || isOverLimit ? 'has-error' : ''}`}
+              placeholder={dialog.inputPrompt.placeholder}
+              value={inputValue}
+              onChange={handleInputChange}
+              rows={3}
+              disabled={busy}
+            />
+            {inputError && (
+              <span className="dialog-input-error" role="alert">
+                {inputError}
+              </span>
+            )}
+          </div>
+        )}
+
+        <div className="dialog-actions">
+          <button className="dash-button" onClick={onClose} disabled={busy}>
+            {dialog.confirmLabel ? 'Cancel' : 'Close'}
+          </button>
+          {dialog.confirmLabel && (
+            <button
+              className={`dash-button ${isDanger ? 'danger' : 'primary'}`}
+              disabled={cannotConfirm}
+              onClick={handleConfirm}
+            >
+              {busy ? 'Working…' : dialog.confirmLabel}
+            </button>
+          )}
+        </div>
+      </section>
+    </div>
+  )
 }
 
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
@@ -67,7 +168,7 @@ function isWithinDateRange(value: string, range: string) {
 
 export function DashboardView() {
   const pathname = usePathname()
-  const { query, environment } = useDashboardControls()
+  const { query, setQuery, environment, setEnvironment } = useDashboardControls()
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [toast, setToast] = useState('')
   const [busyId, setBusyId] = useState('')
@@ -122,8 +223,6 @@ export function DashboardView() {
   const recoveries = useMemo(() => recoveriesResource.data ?? [], [recoveriesResource.data])
   const agents = useMemo(() => agentsResource.data ?? [], [agentsResource.data])
   const analytics = analyticsResource.data
-  const apiErrors = [servicesResource.error, incidentsResource.error, recoveriesResource.error, analyticsResource.error, healthResource.error, incidentDetailResource.error, agentsResource.error].filter(Boolean)
-  const loading = !demoMode && [servicesResource, incidentsResource, recoveriesResource, analyticsResource, healthResource, agentsResource].some((resource) => resource.isLoading)
   const globalQuery = query.trim().toLowerCase()
   const filteredServices = useMemo(() => services.filter((service) => (environment === 'all' || service.environment === environment) && `${service.name} ${service.environment} ${service.status} ${service.id}`.toLowerCase().includes(globalQuery)), [services, environment, globalQuery])
   const filteredIncidents = useMemo(() => incidents.filter((incident) => `${incident.id} ${incident.title} ${incident.serviceName} ${incident.status} ${incident.severity}`.toLowerCase().includes(globalQuery)), [incidents, globalQuery])
@@ -158,12 +257,17 @@ export function DashboardView() {
     setDialog({ title: 'Approve recovery action?', description: `This submits approval for ${action?.action ?? 'this action'} on ${action?.serviceName ?? 'the selected service'}. The backend policy remains authoritative.`, confirmLabel: 'Approve action', onConfirm: () => performApproval(id) })
   }
 
-  async function performRejection(id: string) {
+  async function performRejection(id: string, reason?: string) {
     setBusyId(id)
     try {
-      const result = await recoveriesApi.reject(id)
+      const trimmedReason = reason?.trim() ? reason.trim() : undefined
+      const result = await recoveriesApi.reject(id, trimmedReason)
       await Promise.all([recoveriesResource.mutate(), incidentsResource.mutate()])
-      setToast(`Recovery action was rejected: ${result.status}.`)
+      setToast(
+        trimmedReason
+          ? `Recovery action was rejected: ${result.action} ("${trimmedReason}")`
+          : `Recovery action was rejected: ${result.status}.`
+      )
     } catch (error) {
       setDialog({ title: 'Rejection was not completed', description: error instanceof Error ? error.message : 'The backend rejected the request.' })
     } finally {
@@ -177,7 +281,20 @@ export function DashboardView() {
       setDialog({ title: 'Demo actions are read-only', description: 'No infrastructure operation ran. Connect a backend to reject real recovery controls.' })
       return
     }
-    setDialog({ title: 'Reject recovery action?', description: `This records a rejection for ${action?.action ?? 'this action'} on ${action?.serviceName ?? 'the selected service'}. The action will be marked as rejected.`, confirmLabel: 'Reject action', onConfirm: () => performRejection(id) })
+    setDialog({
+      title: 'Reject recovery action?',
+      description: `Provide an optional operational reason for declining ${action?.action ?? 'this remediation'} on ${action?.serviceName ?? 'the service'}. This will be logged in the immutable audit log.`,
+      confirmLabel: 'Reject action',
+      confirmTone: 'danger',
+      inputPrompt: {
+        label: 'Rejection reason (optional)',
+        placeholder: 'Specify why this remediation was declined (e.g. Maintenance in progress, manual mitigation preferred, false alarm)...',
+        maxLength: 500,
+      },
+      onConfirm: async (inputValue) => {
+        await performRejection(id, inputValue)
+      },
+    })
   }
 
   async function performRecoveryRequest(id: string) {
@@ -255,7 +372,13 @@ export function DashboardView() {
   }
 
   async function downloadReport(id: string, format: 'pdf' | 'json' = 'pdf') {
-    if (demoMode) return
+    if (demoMode) {
+      setDialog({
+        title: 'Backend connection required',
+        description: `Generating ${format.toUpperCase()} incident reports requires an active FastAPI backend (GET /api/v1/incidents/${id}/report?format=${format}). Configure NEXT_PUBLIC_API_BASE_URL to download live reports.`,
+      })
+      return
+    }
     setBusyId(`${id}-${format}`)
     try {
       const blob = await incidentsApi.downloadReport(id, format)
@@ -269,7 +392,10 @@ export function DashboardView() {
       window.setTimeout(() => URL.revokeObjectURL(fileUrl), 1000)
       setToast(`Report download completed for ${id} (${format.toUpperCase()}).`)
     } catch (error) {
-      setDialog({ title: 'Report could not be downloaded', description: error instanceof Error ? error.message : 'The backend did not return a report.' })
+      setDialog({
+        title: `Could not download ${format.toUpperCase()} report`,
+        description: error instanceof Error ? error.message : 'The backend did not return a report.',
+      })
     } finally {
       setBusyId('')
     }
@@ -291,46 +417,385 @@ export function DashboardView() {
   }
 
   const matchingIncidents = filteredIncidents.filter((incident) => (severityFilter === 'all' || incident.severity === severityFilter) && (statusFilter === 'all' || incident.status === statusFilter) && (serviceFilter === 'all' || incident.serviceId === serviceFilter) && isWithinDateRange(incident.detectedAt, incidentRange))
-  const commonNotices = <>{notice}{loading && <div className="notice-strip live-notice" role="status">Loading current backend data. Sample values are not substituted in live mode.</div>}{apiErrors.length > 0 && <div className="error-strip" role="alert"><strong>Backend data could not be loaded.</strong> {apiErrors[0] instanceof Error ? apiErrors[0].message : 'Request failed. Check the API URL and server response.'} Sample values are not substituted in live mode. <button className="table-sort" onClick={refreshData}>Retry</button></div>}</>
+  const commonNotices = notice
   const dialogLayer = dialog && <ConfirmDialog dialog={dialog} onClose={() => setDialog(null)} busy={busyId !== ''} />
   const toastLayer = toast && <Toast message={toast} onClose={() => setToast('')} />
 
   if (page === 'services' && detailId) {
-    return <>{commonNotices}{heading(serviceForDetail?.name ?? 'Service details', serviceForDetail ? `Service health and associated activity · ${serviceForDetail.environment}` : loading ? 'Loading service details from the backend.' : 'This service is not present in the available data.', <Link className="dash-button" href="/dashboard/services"><ArrowDownRight size={12} />All services</Link>)}{serviceForDetail && <ServiceDetailView service={serviceForDetail} incidents={incidents} recoveries={recoveries} />}{dialogLayer}{toastLayer}</>
+    const serviceLoading = !demoMode && servicesResource.isLoading
+    const serviceError = servicesResource.error
+    return (
+      <>
+        {commonNotices}
+        {heading(
+          serviceForDetail?.name ?? (serviceLoading ? 'Loading service...' : 'Service details'),
+          serviceForDetail
+            ? `Service health and associated activity · ${serviceForDetail.environment}`
+            : serviceLoading
+            ? 'Retrieving service telemetry from the backend API.'
+            : 'This service is not present in the available data.',
+          <Link className="dash-button" href="/dashboard/services">
+            <ArrowDownRight size={12} />All services
+          </Link>
+        )}
+        {serviceLoading ? (
+          <div className="metric-grid metric-grid-six">
+            <MetricCardSkeleton tone="teal" />
+            <MetricCardSkeleton tone="violet" />
+            <MetricCardSkeleton tone="teal" />
+            <MetricCardSkeleton tone="amber" />
+            <MetricCardSkeleton tone="teal" />
+            <MetricCardSkeleton tone="teal" />
+          </div>
+        ) : serviceError ? (
+          <SectionErrorState
+            title={`Failed to load service ${detailId}`}
+            error={serviceError}
+            onRetry={() => servicesResource.mutate()}
+          />
+        ) : serviceForDetail ? (
+          <ServiceDetailView
+            service={serviceForDetail}
+            incidents={incidents}
+            recoveries={recoveries}
+            incidentsLoading={!demoMode && incidentsResource.isLoading}
+            incidentsError={incidentsResource.error}
+            onRetryIncidents={() => incidentsResource.mutate()}
+            recoveriesLoading={!demoMode && recoveriesResource.isLoading}
+            recoveriesError={recoveriesResource.error}
+            onRetryRecoveries={() => recoveriesResource.mutate()}
+          />
+        ) : (
+          <EmptyState
+            title="Service not found"
+            detail={`No service with ID "${detailId}" exists in the current environment.`}
+            icon={Server}
+          />
+        )}
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'incidents' && detailId) {
-    return <>{commonNotices}{heading(incidentForDetail?.id ?? 'Incident details', incidentForDetail?.title ?? (loading ? 'Loading incident details from the backend.' : 'This incident is not present in the available data.'), <Link className="dash-button" href="/dashboard/incidents"><ArrowDownRight size={12} />All incidents</Link>)}{incidentForDetail && <><IncidentDetailView incident={incidentForDetail} onRequestRecovery={() => beginRecoveryRequest(incidentForDetail)} /><IncidentCollaborationPanel incident={incidentForDetail} demoMode={demoMode} onIncidentUpdated={() => incidentsResource.mutate()} /></>}{!incidentForDetail && !loading && <div className="dash-card panel"><p className="panel-subtitle">The selected incident was not found.</p></div>}{dialogLayer}{toastLayer}</>
+    const incidentLoading = !demoMode && incidentDetailResource.isLoading
+    const incidentError = incidentDetailResource.error
+    const isPdfBusy = busyId === `${detailId}-pdf`
+    const isJsonBusy = busyId === `${detailId}-json`
+    const isBusy = Boolean(busyId)
+
+    return (
+      <>
+        {commonNotices}
+        {heading(
+          incidentForDetail?.id ?? (incidentLoading ? 'Loading incident...' : 'Incident details'),
+          incidentForDetail?.title ?? (incidentLoading ? 'Retrieving incident diagnosis from the backend API.' : 'This incident is not present in the available data.'),
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            {incidentForDetail && (
+              <>
+                <button
+                  className="dash-button"
+                  disabled={isBusy}
+                  onClick={() => downloadReport(incidentForDetail.id, 'pdf')}
+                  title="Download post-mortem PDF report"
+                  aria-label="Download PDF report"
+                >
+                  {isPdfBusy ? <RefreshCw size={12} className="spin" /> : <Download size={12} />}
+                  {isPdfBusy ? 'Preparing PDF…' : 'Download PDF Report'}
+                </button>
+                <button
+                  className="dash-button"
+                  disabled={isBusy}
+                  onClick={() => downloadReport(incidentForDetail.id, 'json')}
+                  title="Download structured JSON report"
+                  aria-label="Download JSON report"
+                >
+                  {isJsonBusy ? <RefreshCw size={12} className="spin" /> : <FileText size={12} />}
+                  {isJsonBusy ? 'Preparing JSON…' : 'Download JSON Report'}
+                </button>
+              </>
+            )}
+            <Link className="dash-button" href="/dashboard/incidents">
+              <ArrowDownRight size={12} />All incidents
+            </Link>
+          </div>
+        )}
+        {incidentLoading ? (
+          <div className="incident-detail-grid">
+            <div className="dash-card panel"><ListSkeleton count={4} /></div>
+            <div className="dash-card panel"><ListSkeleton count={4} /></div>
+          </div>
+        ) : incidentError ? (
+          <SectionErrorState
+            title={`Failed to load incident ${detailId}`}
+            error={incidentError}
+            onRetry={() => incidentDetailResource.mutate()}
+          />
+        ) : incidentForDetail ? (
+          <>
+            <IncidentDetailView
+              incident={incidentForDetail}
+              onRequestRecovery={() => beginRecoveryRequest(incidentForDetail)}
+              onDownloadReport={downloadReport}
+              busyId={busyId}
+            />
+            <IncidentCollaborationPanel
+              incident={incidentForDetail}
+              demoMode={demoMode}
+              onIncidentUpdated={() => {
+                incidentsResource.mutate()
+                incidentDetailResource.mutate()
+              }}
+            />
+          </>
+        ) : (
+          <EmptyState
+            title="Incident not found"
+            detail={`No incident with ID "${detailId}" exists in the available records.`}
+            icon={CircleAlert}
+          />
+        )}
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'services') {
-    return <>{commonNotices}{heading('Services', 'Monitor health, availability, latency, and error rate across environments.', <span className="demo-label">{filteredServices.length} services in view</span>)}<section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Service inventory</h2><p className="panel-subtitle">Select a column heading to sort. Search and environment filters are in the top bar.</p></div></div><ServiceTable services={filteredServices} /></section>{dialogLayer}{toastLayer}</>
+    const servicesLoading = !demoMode && servicesResource.isLoading
+    return (
+      <>
+        {commonNotices}
+        {heading(
+          'Services',
+          'Monitor health, availability, latency, and error rate across environments.',
+          <span className="demo-label">
+            {servicesLoading ? 'Checking services...' : `${filteredServices.length} services in view`}
+          </span>
+        )}
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Service inventory</h2>
+              <p className="panel-subtitle">Select a column heading to sort. Search and environment filters are in the top bar.</p>
+            </div>
+          </div>
+          <ServiceTable
+            services={filteredServices}
+            loading={servicesLoading}
+            error={servicesResource.error}
+            onRetry={() => servicesResource.mutate()}
+            filterQuery={query}
+            onClearFilter={() => {
+              setQuery('')
+              setEnvironment('all')
+            }}
+          />
+        </section>
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'incidents') {
-    return <>{commonNotices}{heading('Incident management', 'Inspect severity, service impact, diagnosis, and recovery state.', <span className="demo-label">{matchingIncidents.length} incidents</span>)}<div className="search-filter incident-filters"><label><span>Severity</span><select className="small-select" value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}><option value="all">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label><label><span>Status</span><select className="small-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses</option><option value="open">Open</option><option value="investigating">Investigating</option><option value="recovering">Recovering</option><option value="resolved">Resolved</option></select></label><label><span>Service</span><select className="small-select" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)}><option value="all">All services</option>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label><label><span>Date</span><select className="small-select" value={incidentRange} onChange={(event) => setIncidentRange(event.target.value)}><option value="all">All dates</option><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option></select></label></div><section className="dash-card panel"><IncidentTable incidents={matchingIncidents} /></section>{dialogLayer}{toastLayer}</>
+    const incidentsLoading = !demoMode && incidentsResource.isLoading
+    const filterActive = severityFilter !== 'all' || statusFilter !== 'all' || serviceFilter !== 'all' || incidentRange !== 'all' || query.trim() !== ''
+    return (
+      <>
+        {commonNotices}
+        {heading(
+          'Incident management',
+          'Inspect severity, service impact, diagnosis, and recovery state.',
+          <span className="demo-label">
+            {incidentsLoading ? 'Loading incidents...' : `${matchingIncidents.length} incidents`}
+          </span>
+        )}
+        <div className="search-filter incident-filters">
+          <label>
+            <span>Severity</span>
+            <select className="small-select" value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} disabled={incidentsLoading}>
+              <option value="all">All severities</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </label>
+          <label>
+            <span>Status</span>
+            <select className="small-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} disabled={incidentsLoading}>
+              <option value="all">All statuses</option>
+              <option value="open">Open</option>
+              <option value="investigating">Investigating</option>
+              <option value="recovering">Recovering</option>
+              <option value="resolved">Resolved</option>
+            </select>
+          </label>
+          <label>
+            <span>Service</span>
+            <select className="small-select" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)} disabled={incidentsLoading || !services.length}>
+              <option value="all">All services</option>
+              {services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Date</span>
+            <select className="small-select" value={incidentRange} onChange={(event) => setIncidentRange(event.target.value)} disabled={incidentsLoading}>
+              <option value="all">All dates</option>
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+            </select>
+          </label>
+        </div>
+        <section className="dash-card panel">
+          <IncidentTable
+            incidents={matchingIncidents}
+            loading={incidentsLoading}
+            error={incidentsResource.error}
+            onRetry={() => incidentsResource.mutate()}
+            filterActive={filterActive}
+            onClearFilter={() => {
+              setSeverityFilter('all')
+              setStatusFilter('all')
+              setServiceFilter('all')
+              setIncidentRange('all')
+              setQuery('')
+            }}
+          />
+        </section>
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'recovery' || page === 'recoveries') {
+    const recoveriesLoading = !demoMode && recoveriesResource.isLoading
     const pending = filteredRecoveries.filter((item) => item.status === 'pending_approval').length
     const approved = filteredRecoveries.filter((item) => item.status === 'approved').length
     const running = filteredRecoveries.filter((item) => item.status === 'running').length
     const completed = filteredRecoveries.filter((item) => item.status === 'completed').length
     const failed = filteredRecoveries.filter((item) => item.status === 'failed').length
-    return <>{commonNotices}{heading('Recovery center', 'Review policy-gated operations and verify status returned by the backend.')}<div className="metric-grid metric-grid-five"><MetricCount label="Pending approval" value={String(pending).padStart(2, '0')} note="Requires review" icon={Clock3} /><MetricCount label="Approved" value={String(approved).padStart(2, '0')} note="Awaiting execution" icon={CheckCircle2} /><MetricCount label="Running" value={String(running).padStart(2, '0')} note="Backend-reported" icon={RefreshCw} /><MetricCount label="Completed" value={String(completed).padStart(2, '0')} note="Verification required" icon={ShieldCheck} /><MetricCount label="Failed" value={String(failed).padStart(2, '0')} note="Needs escalation" icon={ArrowDownRight} /></div><section className="dash-card panel" style={{ marginTop: 13 }}><div className="panel-header"><div><h2 className="panel-title">Recovery queue</h2><p className="panel-subtitle">Review policy-governed actions, approve safe remediations, and trigger automated verification.</p></div></div><RecoveryTable actions={filteredRecoveries} allowControls onApprove={beginApproval} onReject={beginRejection} onExecute={beginExecution} /></section>{dialogLayer}{toastLayer}</>
+    return (
+      <>
+        {commonNotices}
+        {heading('Recovery center', 'Review policy-gated operations and verify status returned by the backend.')}
+        <div className="metric-grid metric-grid-five">
+          {recoveriesLoading ? (
+            <>
+              <MetricCardSkeleton tone="amber" />
+              <MetricCardSkeleton tone="teal" />
+              <MetricCardSkeleton tone="teal" />
+              <MetricCardSkeleton tone="teal" />
+              <MetricCardSkeleton tone="amber" />
+            </>
+          ) : (
+            <>
+              <MetricCount label="Pending approval" value={String(pending).padStart(2, '0')} note="Requires review" icon={Clock3} />
+              <MetricCount label="Approved" value={String(approved).padStart(2, '0')} note="Awaiting execution" icon={CheckCircle2} />
+              <MetricCount label="Running" value={String(running).padStart(2, '0')} note="Backend-reported" icon={RefreshCw} />
+              <MetricCount label="Completed" value={String(completed).padStart(2, '0')} note="Verification required" icon={ShieldCheck} />
+              <MetricCount label="Failed" value={String(failed).padStart(2, '0')} note="Needs escalation" icon={ArrowDownRight} />
+            </>
+          )}
+        </div>
+        <section className="dash-card panel" style={{ marginTop: 13 }}>
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Recovery queue</h2>
+              <p className="panel-subtitle">Review policy-governed actions, approve safe remediations, and trigger automated verification.</p>
+            </div>
+          </div>
+          <RecoveryTable
+            actions={filteredRecoveries}
+            allowControls
+            loading={recoveriesLoading}
+            error={recoveriesResource.error}
+            onRetry={() => recoveriesResource.mutate()}
+            filterActive={Boolean(query.trim())}
+            onClearFilter={() => setQuery('')}
+            onApprove={beginApproval}
+            onReject={beginRejection}
+            onExecute={beginExecution}
+          />
+        </section>
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'history') {
+    const recoveriesLoading = !demoMode && recoveriesResource.isLoading
     const history = filteredRecoveries.filter((item) => item.status === 'completed' || item.status === 'failed' || item.status === 'rejected')
-    return <>{commonNotices}{heading('Recovery history', 'Review completed and failed actions, timing, result, and verification state.', <span className="demo-label">{history.length} records</span>)}<section className="dash-card panel"><div className="panel-header"><div><h2 className="panel-title">Recorded operations</h2><p className="panel-subtitle">An action is only successful when the backend confirms completion and verification.</p></div></div><RecoveryTable actions={history} /></section>{dialogLayer}{toastLayer}</>
+    return (
+      <>
+        {commonNotices}
+        {heading(
+          'Recovery history',
+          'Review completed and failed actions, timing, result, and verification state.',
+          <span className="demo-label">
+            {recoveriesLoading ? 'Loading history...' : `${history.length} records`}
+          </span>
+        )}
+        <section className="dash-card panel">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Recorded operations</h2>
+              <p className="panel-subtitle">An action is only successful when the backend confirms completion and verification.</p>
+            </div>
+          </div>
+          <RecoveryTable
+            actions={history}
+            loading={recoveriesLoading}
+            error={recoveriesResource.error}
+            onRetry={() => recoveriesResource.mutate()}
+            filterActive={Boolean(query.trim())}
+            onClearFilter={() => setQuery('')}
+          />
+        </section>
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'monitoring') {
-    return <>{commonNotices}<MonitoringView services={filteredServices} />{dialogLayer}{toastLayer}</>
+    return (
+      <>
+        {commonNotices}
+        <MonitoringView
+          services={filteredServices}
+          loading={!demoMode && servicesResource.isLoading}
+          error={servicesResource.error}
+          onRetry={() => servicesResource.mutate()}
+        />
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'analytics') {
-    return <>{commonNotices}<AnalyticsView analytics={analytics} demoMode={demoMode} />{dialogLayer}{toastLayer}</>
+    return (
+      <>
+        {commonNotices}
+        <AnalyticsView
+          analytics={analytics}
+          services={filteredServices}
+          incidents={filteredIncidents}
+          recoveries={filteredRecoveries}
+          demoMode={demoMode}
+          loading={!demoMode && analyticsResource.isLoading}
+          error={analyticsResource.error}
+          onRetry={() => analyticsResource.mutate()}
+        />
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'experiments' || page === 'benchmarks') {
@@ -345,7 +810,22 @@ export function DashboardView() {
   }
 
   if (page === 'reports') {
-    return <>{commonNotices}<ReportsView incidents={filteredIncidents} demoMode={demoMode} onDownload={downloadReport} busyId={busyId} />{dialogLayer}{toastLayer}</>
+    return (
+      <>
+        {commonNotices}
+        <ReportsView
+          incidents={filteredIncidents}
+          demoMode={demoMode}
+          onDownload={downloadReport}
+          busyId={busyId}
+          loading={!demoMode && incidentsResource.isLoading}
+          error={incidentsResource.error}
+          onRetry={() => incidentsResource.mutate()}
+        />
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'intelligence') {
@@ -370,7 +850,35 @@ export function DashboardView() {
   }
 
   if (page === 'agents') {
-    return <>{commonNotices}{heading('Infrastructure agents', 'Monitor distributed host agents, mTLS credentials, and execution capabilities.', <span className="demo-label">{filteredAgents.length} agents registered</span>)}<AgentsView agents={filteredAgents} demoMode={demoMode} onRevoke={beginRevocation} busyId={busyId} />{dialogLayer}{toastLayer}</>
+    const agentsLoading = !demoMode && agentsResource.isLoading
+    return (
+      <>
+        {commonNotices}
+        {heading(
+          'Infrastructure agents',
+          'Monitor distributed host agents, mTLS credentials, and execution capabilities.',
+          <span className="demo-label">
+            {agentsLoading ? 'Checking agents...' : `${filteredAgents.length} agents registered`}
+          </span>
+        )}
+        <AgentsView
+          agents={filteredAgents}
+          demoMode={demoMode}
+          onRevoke={beginRevocation}
+          busyId={busyId}
+          loading={agentsLoading}
+          error={agentsResource.error}
+          onRetry={() => agentsResource.mutate()}
+          filterActive={Boolean(query.trim() || environment !== 'all')}
+          onClearFilter={() => {
+            setQuery('')
+            setEnvironment('all')
+          }}
+        />
+        {dialogLayer}
+        {toastLayer}
+      </>
+    )
   }
 
   if (page === 'notifications') {
@@ -401,5 +909,31 @@ export function DashboardView() {
     return <>{commonNotices}{heading('Page not found', 'Choose a workspace area from the navigation.', <Link className="dash-button" href="/dashboard"><ArrowDownRight size={12} />Overview</Link>)}{dialogLayer}{toastLayer}</>
   }
 
-  return <>{commonNotices}<OverviewView services={filteredServices} incidents={filteredIncidents} recoveries={filteredRecoveries} analytics={analytics} demoMode={demoMode} loading={loading} onRefresh={refreshData} />{dialogLayer}{toastLayer}</>
+  return (
+    <>
+      {commonNotices}
+      <OverviewView
+        services={filteredServices}
+        incidents={filteredIncidents}
+        recoveries={filteredRecoveries}
+        analytics={analytics}
+        demoMode={demoMode}
+        onRefresh={refreshData}
+        servicesLoading={!demoMode && servicesResource.isLoading}
+        servicesError={servicesResource.error}
+        onRetryServices={() => servicesResource.mutate()}
+        incidentsLoading={!demoMode && incidentsResource.isLoading}
+        incidentsError={incidentsResource.error}
+        onRetryIncidents={() => incidentsResource.mutate()}
+        recoveriesLoading={!demoMode && recoveriesResource.isLoading}
+        recoveriesError={recoveriesResource.error}
+        onRetryRecoveries={() => recoveriesResource.mutate()}
+        analyticsLoading={!demoMode && analyticsResource.isLoading}
+        analyticsError={analyticsResource.error}
+        onRetryAnalytics={() => analyticsResource.mutate()}
+      />
+      {dialogLayer}
+      {toastLayer}
+    </>
+  )
 }
