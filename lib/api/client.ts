@@ -145,7 +145,7 @@ async function performTokenRefresh(): Promise<string | null> {
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  if (!API_BASE_URL) {
+  if (!isApiConfigured) {
     throw new ApiError('The FastAPI backend service is not configured. Set NEXT_PUBLIC_API_BASE_URL.', 0)
   }
 
@@ -230,7 +230,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 }
 
 export async function apiBlob(path: string, signal?: AbortSignal): Promise<Blob> {
-  if (!API_BASE_URL) throw new ApiError('The FastAPI backend service is not configured.', 0)
+  if (!isApiConfigured) throw new ApiError('The FastAPI backend service is not configured.', 0)
   const headers: Record<string, string> = {
     Accept: 'application/pdf, application/json, application/octet-stream',
   }

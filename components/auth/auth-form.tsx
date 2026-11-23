@@ -26,14 +26,18 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
 
     let isMounted = true
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    // Give backend up to 10 seconds to respond, accommodating serverless cold starts
+    const timeoutId = setTimeout(() => controller.abort(), 10000)
 
     async function checkBackend() {
       try {
         await healthApi.get(controller.signal)
         if (isMounted) setConnectionStatus('connected')
-      } catch {
-        if (isMounted) setConnectionStatus('unreachable')
+      } catch (err) {
+        // Only mark unreachable if the component is still mounted and not deliberately aborted on unmount
+        if (isMounted) {
+          setConnectionStatus('unreachable')
+        }
       } finally {
         clearTimeout(timeoutId)
       }
