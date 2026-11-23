@@ -233,8 +233,43 @@ button { color: inherit; }
 
 /* App workspace */
 .dashboard-root { min-height: 100vh; background: #080b12; color: #e7edf5; }
-.dashboard-sidebar { position: fixed; inset: 0 auto 0 0; z-index: 30; width: 240px; border-right: 1px solid var(--line); background: #0a0e17; display: flex; flex-direction: column; padding: 20px 14px 14px; transition: transform .25s; }
+.dashboard-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  height: 100vh;
+  height: 100dvh;
+  width: 240px;
+  z-index: 30;
+  border-right: 1px solid var(--line);
+  background: #0a0e17;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  transition: transform .25s;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
+}
+.dashboard-sidebar::-webkit-scrollbar {
+  width: 5px;
+}
+.dashboard-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dashboard-sidebar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+}
+.dashboard-sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+.sidebar-header { flex-shrink: 0; }
 .sidebar-brand { padding: 0 7px 25px; }
+.sidebar-section-nav { flex-shrink: 0; }
 .workspace-label { color: #65748a; font-size: 9px; text-transform: uppercase; letter-spacing: .14em; padding: 10px 10px 8px; }
 .sidebar-nav { display: grid; gap: 3px; }
 .sidebar-link { display: flex; align-items: center; gap: 11px; padding: 10px 10px; border-radius: 8px; color: #8e9bb0; font-size: 11px; transition: .18s; }
@@ -242,7 +277,7 @@ button { color: inherit; }
 .sidebar-link.active { color: #d9fffb; background: rgba(53,214,197,.1); box-shadow: inset 2px 0 var(--accent); }
 .sidebar-link.active svg { color: var(--accent); }
 .sidebar-link svg { width: 15px; height: 15px; }
-.sidebar-bottom { margin-top: auto; }
+.sidebar-bottom { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; flex-shrink: 0; }
 .sidebar-help { border: 1px solid rgba(148,163,184,.12); border-radius: 11px; background: rgba(17,24,39,.72); padding: 12px; margin: 12px 2px; }
 .sidebar-help strong { font-size: 10px; }
 .sidebar-help p { color: #8290a4; line-height: 1.6; font-size: 9px; margin: 7px 0 0; }

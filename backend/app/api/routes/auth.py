@@ -208,6 +208,17 @@ async def register(
         )
     except (OperationalError, InterfaceError, DBAPIError) as dbe:
         await db.rollback()
+        err_str = str(dbe)
+        # Provide a more informative message if schema is not initialized
+        if "does not exist" in err_str or "UndefinedTable" in err_str or "relation" in err_str.lower():
+            logger.error("Registration failed: database schema not initialized (missing tables): %s", dbe)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "Database schema is not initialized. The required tables do not exist. "
+                    "Database migrations must be applied before registration is available."
+                ),
+            )
         logger.error("Database connection failure during registration: %s", dbe)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

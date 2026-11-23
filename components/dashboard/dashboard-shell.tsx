@@ -98,18 +98,31 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     <div className="dashboard-root">
       {isMobile && sidebarOpen && <button className="sidebar-scrim" type="button" aria-label="Close workspace navigation" onClick={() => setSidebarOpen(false)} />}
       <aside id="workspace-sidebar" className={`dashboard-sidebar${sidebarOpen ? ' open' : ''}`} aria-label="Workspace navigation" aria-hidden={isMobile && !sidebarOpen} inert={isMobile && !sidebarOpen}>
-        <div className="sidebar-brand"><Brand /></div>
-        <div className="workspace-label">Workspace</div>
-        <nav className="sidebar-nav">
-          {navigation.map((item) => {
-            const Icon = item.icon
-            const active = item.href === '/dashboard' ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`)
-            return <Link key={item.href} href={item.href} onClick={() => setSidebarOpen(false)} className={`sidebar-link${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}><Icon aria-hidden="true" />{item.label}</Link>
-          })}
-        </nav>
-        <div className="workspace-label" style={{ marginTop: 16 }}>Manage</div>
-        <nav className="sidebar-nav"><Link className={`sidebar-link${pathname === '/dashboard/settings' ? ' active' : ''}`} href="/dashboard/settings" onClick={() => setSidebarOpen(false)}><Settings2 aria-hidden="true" />Settings</Link></nav>
+        {/* Header: AutoHeal DevOps logo and application name */}
+        <div className="sidebar-header">
+          <div className="sidebar-brand"><Brand /></div>
+        </div>
+
+        {/* Navigation: All existing workspace navigation items */}
+        <div className="sidebar-section-nav">
+          <div className="workspace-label">Workspace</div>
+          <nav className="sidebar-nav" aria-label="Workspace navigation">
+            {navigation.map((item) => {
+              const Icon = item.icon
+              const active = item.href === '/dashboard' ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`)
+              return <Link key={item.href} href={item.href} onClick={() => setSidebarOpen(false)} className={`sidebar-link${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}><Icon aria-hidden="true" />{item.label}</Link>
+            })}
+          </nav>
+        </div>
+
+        {/* Bottom section: Manage options, including Settings */}
         <div className="sidebar-bottom">
+          <div className="workspace-label">Manage</div>
+          <nav className="sidebar-nav" aria-label="Manage navigation">
+            <Link className={`sidebar-link${pathname === '/dashboard/settings' ? ' active' : ''}`} href="/dashboard/settings" onClick={() => setSidebarOpen(false)} aria-current={pathname === '/dashboard/settings' ? 'page' : undefined}>
+              <Settings2 aria-hidden="true" />Settings
+            </Link>
+          </nav>
           <div className="sidebar-help"><strong>Need a hand?</strong><p>Explore the demo or connect your API to see live service data.</p><Link className="feature-more" href="/">Explore platform <ChevronDown size={11} style={{ transform: 'rotate(-90deg)' }} /></Link></div>
           <div className="profile-row"><div className="avatar" aria-hidden="true">{initials}</div><div><div className="profile-name">{displayName}</div><div className="profile-role">{displayRole}</div></div><ChevronDown size={13} style={{ marginLeft: 'auto', color: '#78869a' }} /></div>
         </div>

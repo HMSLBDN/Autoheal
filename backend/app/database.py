@@ -129,6 +129,38 @@ def validate_database_url(url: str) -> None:
         raise ValueError(f"Invalid DATABASE_URL configuration '{url}': {exc}") from exc
 
 
+def ensure_neon_dns_fallback() -> None:
+    """
+    Installs a transparent fallback for socket.getaddrinfo that resolves *.neon.tech
+    via public DNS (8.8.8.8 / 1.1.1.1) if the local network's DNS server (such as
+    cellular mobile hotspots) refuses or fails to resolve Neon subdomains.
+    """
+    import socket
+    if getattr(socket, "_neon_dns_fallback_installed", False):
+        return
+
+    orig_getaddrinfo = socket.getaddrinfo
+
+    def _fallback_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        try:
+            return orig_getaddrinfo(host, port, family, type, proto, flags)
+        except socket.gaierror as exc:
+            if isinstance(host, str) and host.endswith(".neon.tech"):
+                try:
+                    import dns.resolver
+                    r = dns.resolver.Resolver()
+                    r.nameservers = ["8.8.8.8", "1.1.1.1"]
+                    answers = r.resolve(host, "A")
+                    for a in answers:
+                        return orig_getaddrinfo(a.address, port, family, type, proto, flags)
+                except Exception:
+                    pass
+            raise exc
+
+    socket.getaddrinfo = _fallback_getaddrinfo
+    socket._neon_dns_fallback_installed = True
+
+
 def prepare_database_url_and_args(raw_url: str) -> Tuple[str, dict]:
     """
     Authoritative helper that prepares a database URL and connection arguments for asyncpg.
@@ -136,16 +168,23 @@ def prepare_database_url_and_args(raw_url: str) -> Tuple[str, dict]:
     2. For PostgreSQL asyncpg connections, extracts server settings like 'application_name'
        and 'search_path' from the URL query and moves them to connect_args['server_settings'],
        preventing asyncpg.connect() TypeError on unexpected keyword arguments.
-    3. Returns (clean_url, extra_engine_kwargs).
+    3. Normalizes numeric connection arguments ('timeout', 'command_timeout', 'statement_cache_size')
+       into typed values in connect_args, avoiding Python 3.12 TypeError: unsupported operand type(s)
+       for +: 'float' and 'str'.
+    4. Automatically disables prepared statements ('statement_cache_size': 0) when connecting to
+       Neon pooled endpoints (-pooler) to prevent PgBouncer transaction pooling errors.
+    5. Returns (clean_url, extra_engine_kwargs).
     """
     if not raw_url or raw_url.startswith("sqlite"):
         return raw_url, {}
 
+    ensure_neon_dns_fallback()
     normalized = settings.assemble_database_url(raw_url) if hasattr(settings, "assemble_database_url") else raw_url
     try:
         url_obj = make_url(normalized)
         query = dict(url_obj.query)
         server_settings: dict = {}
+        connect_args: dict = {}
 
         # application_name and search_path are supported by PostgreSQL server_settings in asyncpg,
         # but NOT as top-level asyncpg.connect() kwargs.
@@ -154,20 +193,46 @@ def prepare_database_url_and_args(raw_url: str) -> Tuple[str, dict]:
         if "search_path" in query:
             server_settings["search_path"] = query.pop("search_path")
 
-        # Strip any other non-asyncpg keyword arguments that might remain in the query string
+        # In Python 3.12, if 'timeout' remains in the URL query string, SQLAlchemy passes it as a string
+        # to asyncpg.connect(), which throws TypeError: unsupported operand type(s) for +: 'float' and 'str'.
+        # Therefore, numeric timeout and statement caching options must be moved to connect_args as typed values.
+        if "timeout" in query:
+            try:
+                connect_args["timeout"] = float(query.pop("timeout"))
+            except ValueError:
+                connect_args["timeout"] = 30.0
+        else:
+            connect_args["timeout"] = 30.0
+
+        if "command_timeout" in query:
+            try:
+                connect_args["command_timeout"] = float(query.pop("command_timeout"))
+            except ValueError:
+                connect_args["command_timeout"] = 30.0
+        else:
+            connect_args["command_timeout"] = 30.0
+
+        is_pooled = "-pooler" in (url_obj.host or "") or "-pooler" in normalized
+        if "statement_cache_size" in query:
+            try:
+                connect_args["statement_cache_size"] = int(query.pop("statement_cache_size"))
+            except ValueError:
+                pass
+        elif is_pooled:
+            # Transaction pooling (PgBouncer/Neon pooler) does not support prepared statements
+            connect_args["statement_cache_size"] = 0
+
+        # Only 'ssl' is safe as a string query parameter in asyncpg SQLAlchemy URLs
         valid_asyncpg_query_keys = {
             "ssl",
-            "statement_cache_size",
-            "max_cached_statement_lifetime",
-            "max_cacheable_statement_size",
-            "command_timeout",
-            "timeout",
         }
         filtered_query = {k: v for k, v in query.items() if k in valid_asyncpg_query_keys}
 
         extra_kwargs: dict = {}
         if server_settings:
-            extra_kwargs.setdefault("connect_args", {})["server_settings"] = server_settings
+            connect_args["server_settings"] = server_settings
+        if connect_args:
+            extra_kwargs["connect_args"] = connect_args
 
         clean_url = url_obj.set(query=filtered_query).render_as_string(hide_password=False)
         return clean_url, extra_kwargs
@@ -262,25 +327,51 @@ async def check_database_health() -> Dict[str, str]:
     Safely probes database reachability and schema readiness without raising unhandled exceptions.
     Distinguishes:
     - database: 'connected' | 'unreachable' | 'not_configured'
-    - schema: 'ready' | 'pending' | 'error'
+    - schema: 'ready' | 'not_initialized' | 'error'
+
+    'not_initialized' means the database is reachable but migrations have NOT been applied yet
+    (the 'users' table does not exist). This is a schema initialization problem, not a
+    connection failure, and must be reported distinctly.
     """
     if not settings.DATABASE_URL:
         return {"database": "not_configured", "schema": "not_configured"}
 
     from sqlalchemy import text
+
+    _SCHEMA_NOT_INITIALIZED_ERRORS = (
+        "UndefinedTableError",
+        "ProgrammingError",
+        "NoSuchTableError",
+        "does not exist",
+        "relation",
+    )
+
     try:
         async with async_session_factory() as session:
-            # 1. Probe connectivity
+            # 1. Probe basic connectivity
             await session.execute(text("SELECT 1"))
 
-            # 2. Probe schema readiness (users table must exist)
-            schema_status = "pending"
+            # 2. Probe schema readiness: check if core tables exist
+            schema_status = "not_initialized"
             try:
                 await session.execute(text("SELECT id FROM users LIMIT 1"))
                 schema_status = "ready"
             except Exception as schema_err:
-                logger.warning("Database schema check probe (users table): %s", schema_err)
-                schema_status = "pending"
+                err_str = str(schema_err)
+                err_cls = type(schema_err).__name__
+                # Distinguish schema-missing (migration not applied) from other errors
+                is_missing = any(sig in err_str for sig in _SCHEMA_NOT_INITIALIZED_ERRORS) or any(
+                    sig in err_cls for sig in _SCHEMA_NOT_INITIALIZED_ERRORS
+                )
+                if is_missing:
+                    schema_status = "not_initialized"
+                    logger.warning(
+                        "Database is reachable but schema is not initialized. "
+                        "The 'users' table does not exist. Run: alembic upgrade head"
+                    )
+                else:
+                    schema_status = "error"
+                    logger.warning("Database schema probe error (%s): %s", err_cls, err_str)
 
             return {"database": "connected", "schema": schema_status}
     except Exception as db_err:

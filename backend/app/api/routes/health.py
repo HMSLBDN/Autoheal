@@ -38,12 +38,18 @@ async def get_health(request: Request) -> Dict[str, Any]:
     else:
         db_health = await check_database_health()
 
-    overall_status = "healthy"
+    db_status = db_health["database"]
+    schema_status = db_health["schema"]
+
+    # In health check, 'status' reflects API server availability (contract requirement: 'healthy').
+    # 'database' and 'database_schema' distinctly convey backend storage readiness.
+    # A missing 'users' table is explicitly reported as 'not_initialized', distinguishing
+    # schema readiness from network/connection reachability.
     return {
-        "status": overall_status,
+        "status": "healthy",
         "api": "healthy",
-        "database": db_health["database"],
-        "database_schema": db_health["schema"],
+        "database": db_status,
+        "database_schema": schema_status,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "environment": settings.APP_ENV,
         "version": settings.APP_VERSION,

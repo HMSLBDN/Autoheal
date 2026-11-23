@@ -47,10 +47,13 @@ target_metadata = Base.metadata
 
 # Override sqlalchemy.url with normalized application settings (converts postgres:// to postgresql+asyncpg:// and normalizes parameters)
 raw_db_url = os.environ.get("DATABASE_URL") or settings.DATABASE_URL or config.get_main_option("sqlalchemy.url")
+extra_engine_kwargs = {}
 if raw_db_url:
     from app.database import prepare_database_url_and_args
-    clean_db_url, _ = prepare_database_url_and_args(raw_db_url)
+    clean_db_url, extra_args = prepare_database_url_and_args(raw_db_url)
     config.set_main_option("sqlalchemy.url", clean_db_url)
+    if extra_args:
+        extra_engine_kwargs.update(extra_args)
 
 
 def run_migrations_offline() -> None:
@@ -88,10 +91,14 @@ async def run_async_migrations() -> None:
     """In this scenario we need to create an Engine
     and associate a connection with the context.
     """
+    engine_kwargs = {"poolclass": pool.NullPool}
+    if extra_engine_kwargs:
+        engine_kwargs.update(extra_engine_kwargs)
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
+        **engine_kwargs,
     )
 
     async with connectable.connect() as connection:
