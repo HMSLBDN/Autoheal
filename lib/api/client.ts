@@ -1,6 +1,14 @@
 function normalizeBaseUrl(url?: string): string {
   if (!url) return ''
   let trimmed = url.trim().replace(/\/+$/, '')
+  // Auto-prefix protocol if omitted (e.g., "api.autoheal.dev" -> "https://api.autoheal.dev")
+  if (trimmed && !/^https?:\/\//i.test(trimmed)) {
+    if (/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(trimmed)) {
+      trimmed = `http://${trimmed}`
+    } else {
+      trimmed = `https://${trimmed}`
+    }
+  }
   if (trimmed.endsWith('/api/v1')) {
     trimmed = trimmed.slice(0, -7)
   } else if (trimmed.endsWith('/api')) {
@@ -9,7 +17,9 @@ function normalizeBaseUrl(url?: string): string {
   return trimmed.replace(/\/+$/, '')
 }
 
-export const API_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL)
+export const API_BASE_URL = normalizeBaseUrl(
+  process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL
+)
 export const isApiConfigured = API_BASE_URL.length > 0
 export const isDemoModeExplicit = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 

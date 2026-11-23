@@ -45,8 +45,10 @@ if config.config_file_name is not None:
 # Set target metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url with environment or application settings
-db_url = os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
+# Override sqlalchemy.url with normalized application settings (converts postgres:// to postgresql+asyncpg://)
+db_url = settings.DATABASE_URL or os.environ.get("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+if db_url and db_url.startswith(("postgres://", "postgresql://")) and "+asyncpg" not in db_url:
+    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1).replace("postgresql://", "postgresql+asyncpg://", 1)
 config.set_main_option("sqlalchemy.url", db_url)
 
 

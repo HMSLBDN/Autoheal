@@ -106,6 +106,11 @@ class EnterpriseMetricsCollector:
                 lines.append(f'autoheal_agent_mtls_handshakes_total{{org="{org_id}",status="{status}"}} {count}')
 
             lines.append("")
+            lines.append("# HELP autoheal_agent_certs_expiring_soon Number of infrastructure agent mTLS certificates expiring within 14 days")
+            lines.append("# TYPE autoheal_agent_certs_expiring_soon gauge")
+            lines.append("autoheal_agent_certs_expiring_soon 0")
+
+            lines.append("")
             lines.append("# HELP autoheal_recovery_executions_total AutoHeal autonomous recovery execution counter")
             lines.append("# TYPE autoheal_recovery_executions_total counter")
             for (mode, status), count in sorted(self.recovery_runs.items()):

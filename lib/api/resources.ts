@@ -48,7 +48,7 @@ import type {
   WebhookDeliveryAttempt,
   WebhookEndpoint,
 } from '@/types'
-import { apiBlob, apiRequest, asArray, asObject, ApiError, AuthUser, setAccessToken, setStoredUser } from './client'
+import { apiBlob, apiRequest, asArray, asObject, buildApiUrl, ApiError, AuthUser, setAccessToken, setStoredUser } from './client'
 
 function validateService(value: unknown): Service {
   const service = asObject<Service>(value, 'service', {
@@ -728,7 +728,7 @@ export const observabilityApi = {
     return apiRequest<{ status: string; count: number; traces: TraceSpan[] }>(`/api/v1/observability/traces?limit=${limit}`, { signal })
   },
   async getMetricsText(signal?: AbortSignal): Promise<string> {
-    const res = await fetch('/api/v1/observability/metrics', { signal })
+    const res = await fetch(buildApiUrl('/api/v1/observability/metrics'), { signal })
     return res.text()
   },
 }

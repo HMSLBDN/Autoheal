@@ -48,4 +48,6 @@ COPY --chown=autoheal:autoheal . /app
 
 USER autoheal
 
+STOPSIGNAL SIGTERM
+
 CMD ["celery", "-A", "app.worker.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]

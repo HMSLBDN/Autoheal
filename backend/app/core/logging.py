@@ -29,6 +29,8 @@ SENSITIVE_KEYS = {
     "api_key",
     "authorization",
     "secret_key",
+    "signature",
+    "cookie",
 }
 
 

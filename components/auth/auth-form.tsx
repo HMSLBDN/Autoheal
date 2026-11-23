@@ -26,6 +26,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
 
     let isMounted = true
     const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
 
     async function checkBackend() {
       try {
@@ -33,6 +34,8 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
         if (isMounted) setConnectionStatus('connected')
       } catch {
         if (isMounted) setConnectionStatus('unreachable')
+      } finally {
+        clearTimeout(timeoutId)
       }
     }
 
@@ -40,6 +43,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
 
     return () => {
       isMounted = false
+      clearTimeout(timeoutId)
       controller.abort()
     }
   }, [])

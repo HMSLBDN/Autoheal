@@ -10,7 +10,7 @@ services:
     # Plan note: 'starter' provides continuous uptime (~$7/mo). For non-commercial testing,
     # 'plan: free' can be used on web services, though free instances spin down after inactivity.
     plan: starter
-    healthCheckPath: /api/v1/health
+    healthCheckPath: /health
     preDeployCommand: alembic upgrade head
     envVars:
       - key: APP_ENV
@@ -32,6 +32,10 @@ services:
           property: connectionString
       - key: ALERTMANAGER_HMAC_SECRET
         generateValue: true
+      - key: RECOVERY_SIMULATION_MODE
+        value: "true"
+      - key: RESTRICTED_DOCKER_AGENT_ENABLED
+        value: "false"
 
   # ==============================================================================
   # Celery Background Worker
@@ -60,6 +64,10 @@ services:
           type: redis
           name: autoheal-redis
           property: connectionString
+      - key: RECOVERY_SIMULATION_MODE
+        value: "true"
+      - key: RESTRICTED_DOCKER_AGENT_ENABLED
+        value: "false"
 
   # ==============================================================================
   # Celery Beat Periodic Task Scheduler
@@ -87,6 +95,10 @@ services:
           type: redis
           name: autoheal-redis
           property: connectionString
+      - key: RECOVERY_SIMULATION_MODE
+        value: "true"
+      - key: RESTRICTED_DOCKER_AGENT_ENABLED
+        value: "false"
 
   # ==============================================================================
   # Redis Queue & Cache Store

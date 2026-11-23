@@ -340,7 +340,7 @@ async def refresh_token(
     - On valid token: revokes the current token, generates a new token in the same family,
       and issues a fresh JWT access token.
     """
-    raw_token = cookie_token or (payload.refresh_token if payload else None)
+    raw_token = (payload.refresh_token if payload and payload.refresh_token else None) or cookie_token
 
     if not raw_token:
         raise HTTPException(
@@ -500,7 +500,7 @@ async def logout(
     Revokes the current refresh token and its family, clears browser cookies,
     and records an audit log.
     """
-    raw_token = cookie_token or (payload.refresh_token if payload else None)
+    raw_token = (payload.refresh_token if payload and payload.refresh_token else None) or cookie_token
 
     if raw_token:
         token_hash_val = hash_token(raw_token)

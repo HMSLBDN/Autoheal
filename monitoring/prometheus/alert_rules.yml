@@ -19,8 +19,8 @@ groups:
 
       - alert: HighApiLatencyP99
         expr: |
-          (rate(autoheal_http_request_duration_seconds[5m])
-          / rate(autoheal_http_requests_total[5m])) > 0.500
+          (sum(rate(autoheal_http_request_duration_seconds[5m]))
+          / sum(rate(autoheal_http_requests_total[5m]))) > 0.500
         for: 5m
         labels:
           severity: warning

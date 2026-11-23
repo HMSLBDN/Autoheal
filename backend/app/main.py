@@ -111,6 +111,25 @@ async def metrics() -> PlainTextResponse:
 
 
 @app.get(
+    "/health",
+    tags=["Health"],
+    summary="Root service health probe",
+    status_code=200,
+)
+async def root_health() -> Dict[str, str]:
+    """
+    Root-level public health probe for external load balancers, container orchestrators, and CDN probes.
+    """
+    from datetime import datetime, timezone
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "environment": settings.APP_ENV,
+        "version": settings.APP_VERSION,
+    }
+
+
+@app.get(
     "/",
     tags=["Root"],
     summary="Root metadata endpoint",
