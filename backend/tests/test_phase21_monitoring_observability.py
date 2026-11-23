@@ -194,7 +194,7 @@ def test_alertmanager_configuration_validity():
     assert "/api/v1/alerts/webhook" in wh_cfg["url"]
     assert wh_cfg.get("send_resolved") is True
     assert "http_config" in wh_cfg
-    assert "bearer_token" in wh_cfg["http_config"]
+    assert "bearer_token" in wh_cfg["http_config"] or "bearer_token_file" in wh_cfg["http_config"]
 
 
 def test_backend_metrics_export():
