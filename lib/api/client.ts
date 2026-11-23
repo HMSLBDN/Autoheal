@@ -17,10 +17,24 @@ function normalizeBaseUrl(url?: string): string {
   return trimmed.replace(/\/+$/, '')
 }
 
+// When running under unified Vercel Services (same-origin Next.js + FastAPI),
+// the backend is reachable via the current origin, so an empty or "/" NEXT_PUBLIC_API_BASE_URL
+// indicates same-origin deployment. In production on Vercel, if no explicit external URL is provided,
+// we safely default to same-origin relative paths.
+export const isSameOriginDeployment =
+  typeof window !== 'undefined' || process.env.NODE_ENV === 'production'
+
 export const API_BASE_URL = normalizeBaseUrl(
-  process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL
+  process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || ''
 )
-export const isApiConfigured = API_BASE_URL.length > 0
+
+// In production or unified same-origin deployments, API is always configured (defaults to same-origin)
+// unless explicitly disabled or running purely in dev without backend.
+export const isApiConfigured =
+  API_BASE_URL.length > 0 ||
+  process.env.NEXT_PUBLIC_API_BASE_URL === '' ||
+  process.env.NEXT_PUBLIC_API_BASE_URL === '/' ||
+  (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_DEMO_MODE !== 'true')
 export const isDemoModeExplicit = process.env.NEXT_PUBLIC_DEMO_MODE === 'true'
 
 // Demo mode is ONLY active when explicitly enabled or when no backend URL is set during local development.

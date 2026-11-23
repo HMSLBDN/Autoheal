@@ -59,26 +59,46 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
     const password = String(formData.get('password') ?? '')
     const fullName = String(formData.get('name') ?? '').trim()
 
+    // Client-side validation
+    if (!email) {
+      setMessage('Please enter a valid work email address.')
+      setIsSubmitting(false)
+      return
+    }
+    if (!password || password.length < 8) {
+      setMessage('Password must be at least 8 characters in length.')
+      setIsSubmitting(false)
+      return
+    }
+    if (isRegister && !fullName) {
+      setMessage('Please enter your full name.')
+      setIsSubmitting(false)
+      return
+    }
+
     try {
-      if (isApiConfigured) {
-        if (isRegister) {
-          await authApi.register(email, password, fullName || 'Operator')
-        } else {
-          await authApi.login(email, password)
-        }
-        router.push('/dashboard')
+      if (isRegister) {
+        await authApi.register(email, password, fullName || 'Operator')
       } else {
-        setMessage('Backend not configured: Set NEXT_PUBLIC_API_BASE_URL in your hosting environment variables to connect.')
+        await authApi.login(email, password)
       }
+      setConnectionStatus('connected')
+      router.push('/dashboard')
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         if (err.status === 0 || err.status === 408) {
           setConnectionStatus('unreachable')
-          setMessage('Backend unreachable: Could not connect to the AutoHeal backend API. Verify the server is running and accessible.')
+          setMessage('Backend unreachable: Could not connect to the AutoHeal backend API. Verify the service is online and accessible.')
         } else if (err.status === 401) {
           setMessage('Authentication failure: Invalid work email or password.')
         } else if (err.status === 403) {
           setMessage('Authentication failure: Account access is restricted or deactivated.')
+        } else if (err.status === 400) {
+          setMessage(err.message || 'Invalid registration details. Please verify your information.')
+        } else if (err.status === 429) {
+          setMessage('Too many authentication attempts. Please wait a moment before retrying.')
+        } else if (err.status >= 500) {
+          setMessage('Service temporarily unavailable: The database or backend encountered an error. Please try again shortly.')
         } else {
           setMessage(err.message)
         }
@@ -100,7 +120,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'register' }) {
       <div className="notice-strip" style={{ marginBottom: 12 }}>
         {connectionStatus === 'not_configured' && (
           <>
-            <strong style={{ color: '#dedaff' }}>FastAPI preview.</strong> Set NEXT_PUBLIC_API_BASE_URL to authenticate against the backend.
+            <strong style={{ color: '#dedaff' }}>AutoHeal API Gateway.</strong> Connect your account to authenticate securely.
           </>
         )}
         {connectionStatus === 'checking' && (
