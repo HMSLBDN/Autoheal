@@ -735,7 +735,7 @@ export function RecoveryTable({
                     {action.verification}
                   </span>
                 </td>
-                <td>{action.durationSeconds === undefined ? '—' : `${action.durationSeconds}s`}</td>
+                <td>{action.durationSeconds == null ? '—' : `${action.durationSeconds}s`}</td>
                 {allowControls && (
                   <td>
                     {action.status === 'pending_approval' ? (
@@ -849,7 +849,7 @@ export function RecoveryTable({
                         </div>
                         <div className="diagnostic-meta-item">
                           <span className="meta-label">Execution Duration</span>
-                          <span className="meta-value">{action.durationSeconds !== undefined ? `${action.durationSeconds}s` : 'Not recorded'}</span>
+                          <span className="meta-value">{action.durationSeconds != null ? `${action.durationSeconds}s` : 'Not recorded'}</span>
                         </div>
                         <div className="diagnostic-meta-item">
                           <span className="meta-label">Governance Mode</span>

@@ -4,7 +4,7 @@ Strictly matching frontend contracts in types/index.ts and lib/api/resources.ts
 """
 
 from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 RecoveryStatusType = Literal[
     "pending_approval",
@@ -41,11 +41,18 @@ class RecoveryActionResponse(BaseModel):
     approval_required: bool = Field(..., serialization_alias="approvalRequired")
     requested_by: str = Field(..., serialization_alias="requestedBy")
     requested_at: str = Field(..., serialization_alias="requestedAt")
-    duration_seconds: Optional[int] = Field(None, serialization_alias="durationSeconds")
+    duration_seconds: Optional[int] = Field(None, ge=0, serialization_alias="durationSeconds")
     verification: VerificationType
     execution_mode: Optional[str] = Field("SIMULATED", serialization_alias="executionMode")
     evidence_classification: Optional[str] = Field("SIMULATED", serialization_alias="evidenceClassification")
     result: Optional[RecoveryResultResponse] = None
+
+    @field_validator("duration_seconds")
+    @classmethod
+    def validate_duration(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v < 0:
+            raise ValueError("Duration cannot be negative.")
+        return v
 
 
 class RecoveryRejectRequest(BaseModel):

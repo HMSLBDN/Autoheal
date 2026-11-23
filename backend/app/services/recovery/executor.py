@@ -157,6 +157,27 @@ class RecoveryExecutor:
         )
         agent_res = await self.agent_client.dispatch_action(action_req)
 
+        # 6b. For live test microservice, dispatch real recovery to its chaos endpoint safely
+        port = {
+            "checkout-api": 8080,
+            "customer-web": 8081,
+            "payments-api": 8082,
+        }.get(recovery.service_name)
+        if port:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=2.0) as http_client:
+                    for base in [f"http://127.0.0.1:{port}", f"http://localhost:{port}", f"http://{recovery.service_name}:{port}"]:
+                        try:
+                            recover_res = await http_client.post(f"{base}/chaos/recover", json={})
+                            if recover_res.status_code in (200, 204):
+                                logger.info("Dispatched live microservice recovery to %s", base)
+                                break
+                        except Exception:
+                            continue
+            except Exception as e:
+                logger.debug("Live microservice chaos recover probe omitted: %s", e)
+
         # 6a. Check if restricted agent execution failed or was rejected
         if agent_res.status != ActionExecutionStatus.SUCCESS or agent_res.exit_code != 0:
             now = datetime.now(timezone.utc)

@@ -2,6 +2,7 @@
 AutoHeal DevOps — Services & Telemetry Router
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -12,6 +13,9 @@ from app.api.deps import DatabaseDep, OrgDep
 from app.models.metric import ServiceMetric
 from app.models.service import Service
 from app.schemas.service import MetricPoint, ServiceMetricsResponse, ServiceResponse
+from app.services.monitoring import MonitoringService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/services", tags=["Services"])
 
@@ -52,12 +56,14 @@ async def list_services(
     org: OrgDep,
     db: DatabaseDep,
     environment: Optional[str] = Query(None, description="Filter by environment (all, production, staging)"),
+    refresh: bool = Query(False, description="Trigger on-demand live monitoring cycle before returning services"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ) -> List[ServiceResponse]:
     """
     Returns monitored infrastructure services isolated by organization.
     Directly satisfies servicesApi.list() in lib/api/resources.ts.
+    If refresh is requested or telemetry is stale (> 20s), triggers a live monitoring cycle.
     """
     stmt = select(Service).where(Service.organization_id == org.id)
     if environment and environment.lower() != "all":
@@ -66,6 +72,28 @@ async def list_services(
     stmt = stmt.order_by(Service.name.asc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
     services = result.scalars().all()
+
+    # Verify freshness: if refresh requested or any service telemetry is stale (> 20 seconds), run cycle
+    now = datetime.now(timezone.utc)
+    is_stale = refresh
+    if not is_stale and services:
+        for s in services:
+            if s.last_checked is None:
+                is_stale = True
+                break
+            lc = s.last_checked.replace(tzinfo=timezone.utc) if s.last_checked.tzinfo is None else s.last_checked
+            if (now - lc).total_seconds() > 20.0:
+                is_stale = True
+                break
+
+    if is_stale:
+        try:
+            mon_svc = MonitoringService()
+            await mon_svc.run_monitoring_cycle(db)
+            refreshed_result = await db.execute(stmt)
+            services = refreshed_result.scalars().all()
+        except Exception as cycle_err:
+            logger.debug("On-demand monitoring cycle in list_services skipped: %s", cycle_err)
 
     return [format_service_response(s) for s in services]
 
@@ -187,3 +215,60 @@ async def get_service_metrics(
         availability=avail,
         history=history_points,
     )
+
+
+@router.post(
+    "/check",
+    summary="Trigger immediate telemetry monitoring cycle across all services",
+)
+async def trigger_monitoring_cycle_endpoint(
+    org: OrgDep,
+    db: DatabaseDep,
+):
+    """
+    Triggers an immediate live monitoring collection cycle.
+    Probes running microservices, updates telemetry, detects failures, and creates incidents.
+    """
+    monitoring_service = MonitoringService()
+    metrics = await monitoring_service.run_monitoring_cycle(db)
+    return {
+        "status": "success",
+        "services_scraped": len(metrics),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post(
+    "/{service_id}/check",
+    response_model=ServiceResponse,
+    summary="Probe a specific service's health endpoint immediately",
+)
+async def check_single_service_endpoint(
+    service_id: str,
+    org: OrgDep,
+    db: DatabaseDep,
+) -> ServiceResponse:
+    """
+    Immediately probes the target service health endpoint and refreshes its status.
+    """
+    stmt = select(Service).where(Service.id == service_id, Service.organization_id == org.id)
+    result = await db.execute(stmt)
+    svc = result.scalar_one_or_none()
+    if not svc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Service '{service_id}' was not found in this organization.",
+        )
+
+    monitoring_service = MonitoringService()
+    snapshot = await monitoring_service.probe_service(svc)
+
+    svc.status = snapshot.status
+    svc.availability = snapshot.availability
+    svc.error_rate = snapshot.error_rate
+    svc.latency_ms = snapshot.latency_ms
+    svc.last_checked = snapshot.sampled_at
+    await db.commit()
+    await db.refresh(svc)
+
+    return format_service_response(svc)

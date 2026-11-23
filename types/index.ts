@@ -104,7 +104,7 @@ export interface RecoveryAction {
   approvalRequired: boolean
   requestedBy: string
   requestedAt: string
-  durationSeconds?: number
+  durationSeconds?: number | null
   verification: 'pending' | 'passed' | 'failed' | 'not_started'
   executionMode?: ExecutionMode
   evidenceClassification?: EvidenceClassification

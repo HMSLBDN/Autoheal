@@ -77,11 +77,19 @@ async def _dispatch_microservice_chaos(service_name: str, endpoint: str, body: d
     if not port:
         return False
 
-    candidate_urls = [
-        f"http://{service_name}:{port}{endpoint}",
-        f"http://127.0.0.1:{port}{endpoint}",
-        f"http://localhost:{port}{endpoint}",
-    ]
+    import os
+    in_docker = os.path.exists("/.dockerenv") or os.environ.get("RUNNING_IN_DOCKER") == "true" or os.environ.get("CONTAINER") == "true"
+    if in_docker:
+        candidate_urls = [
+            f"http://{service_name}:{port}{endpoint}",
+            f"http://127.0.0.1:{port}{endpoint}",
+            f"http://localhost:{port}{endpoint}",
+        ]
+    else:
+        candidate_urls = [
+            f"http://127.0.0.1:{port}{endpoint}",
+            f"http://localhost:{port}{endpoint}",
+        ]
 
     async with httpx.AsyncClient(timeout=0.35) as client:
         for url in candidate_urls:
@@ -332,6 +340,15 @@ async def reset_demo_environment(
         svc.latency_ms = 22
         svc.last_checked = now
         restored_names.append(svc.name)
+
+        # 2b. Reset cooldown on previous recoveries for this service to allow immediate repeat demos
+        from datetime import timedelta
+        from sqlalchemy import update
+        await db.execute(
+            update(RecoveryAction)
+            .where(RecoveryAction.service_id == svc.id)
+            .values(requested_at=now - timedelta(seconds=1200))
+        )
 
         # 3. Broadcast real-time SSE health
         await event_broadcaster.broadcast(org.id, "service_health", {

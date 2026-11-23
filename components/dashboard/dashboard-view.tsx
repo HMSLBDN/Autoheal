@@ -178,10 +178,10 @@ export function DashboardView() {
   const [incidentRange, setIncidentRange] = useState('all')
 
   const demoMode = isDemoMode
-  const servicesResource = useSWR<Service[]>(demoMode ? 'demo-services' : 'services', () => demoMode ? Promise.resolve(demoServices) : servicesApi.list(), { fallbackData: demoMode ? demoServices : undefined, revalidateOnFocus: false })
-  const incidentsResource = useSWR<Incident[]>(demoMode ? 'demo-incidents' : 'incidents', () => demoMode ? Promise.resolve(demoIncidents) : incidentsApi.list(), { fallbackData: demoMode ? demoIncidents : undefined, revalidateOnFocus: false })
-  const recoveriesResource = useSWR<RecoveryAction[]>(demoMode ? 'demo-recoveries' : 'recoveries', () => demoMode ? Promise.resolve(demoRecoveries) : recoveriesApi.list(), { fallbackData: demoMode ? demoRecoveries : undefined, revalidateOnFocus: false })
-  const analyticsResource = useSWR<AnalyticsSummary>(demoMode ? 'demo-analytics' : 'analytics', () => demoMode ? Promise.resolve(demoAnalytics) : analyticsApi.summary(), { fallbackData: demoMode ? demoAnalytics : undefined, revalidateOnFocus: false })
+  const servicesResource = useSWR<Service[]>(demoMode ? 'demo-services' : 'services', () => demoMode ? Promise.resolve(demoServices) : servicesApi.list(), { fallbackData: demoMode ? demoServices : undefined, revalidateOnFocus: true, refreshInterval: demoMode ? 0 : 5000 })
+  const incidentsResource = useSWR<Incident[]>(demoMode ? 'demo-incidents' : 'incidents', () => demoMode ? Promise.resolve(demoIncidents) : incidentsApi.list(), { fallbackData: demoMode ? demoIncidents : undefined, revalidateOnFocus: true, refreshInterval: demoMode ? 0 : 5000 })
+  const recoveriesResource = useSWR<RecoveryAction[]>(demoMode ? 'demo-recoveries' : 'recoveries', () => demoMode ? Promise.resolve(demoRecoveries) : recoveriesApi.list(), { fallbackData: demoMode ? demoRecoveries : undefined, revalidateOnFocus: true, refreshInterval: demoMode ? 0 : 5000 })
+  const analyticsResource = useSWR<AnalyticsSummary>(demoMode ? 'demo-analytics' : 'analytics', () => demoMode ? Promise.resolve(demoAnalytics) : analyticsApi.summary(), { fallbackData: demoMode ? demoAnalytics : undefined, revalidateOnFocus: true, refreshInterval: demoMode ? 0 : 10000 })
   const healthResource = useSWR<{ status: string }>(demoMode ? 'demo-health' : 'backend-health', () => demoMode ? Promise.resolve({ status: 'demo' }) : healthApi.get(), { fallbackData: demoMode ? { status: 'demo' } : undefined, revalidateOnFocus: false })
   const agentsResource = useSWR<InfrastructureAgent[]>(demoMode ? 'demo-agents' : 'agents', () => demoMode ? Promise.resolve(demoAgents) : agentsApi.list(), { fallbackData: demoMode ? demoAgents : undefined, revalidateOnFocus: false })
   const intelligenceOverviewResource = useSWR<IntelligenceOverview>(demoMode ? 'demo-intelligence-overview' : 'intelligence-overview', () => demoMode ? Promise.resolve(demoIntelligenceOverview) : intelligenceApi.overview(), { fallbackData: demoMode ? demoIntelligenceOverview : undefined, revalidateOnFocus: false })
@@ -233,7 +233,23 @@ export function DashboardView() {
 
   const heading = (title: string, description: string, action?: React.ReactNode) => <div className="dashboard-heading"><div><h1>{title}</h1><p>{description}</p></div>{action && <div className="dashboard-toolbar">{action}</div>}</div>
   const notice = <div className={`notice-strip ${demoMode ? '' : 'live-notice'}`}><strong>{demoMode ? 'Read-only demonstration.' : 'Backend connection configured.'}</strong> {demoMode ? 'All displayed service names, incidents, metrics, and recovery outcomes are illustrative. No infrastructure is connected.' : 'Requests use the configured API. Values are shown only when returned by the backend.'}</div>
-  const refreshData = async () => { await Promise.all([servicesResource.mutate(), incidentsResource.mutate(), recoveriesResource.mutate(), analyticsResource.mutate(), healthResource.mutate(), agentsResource.mutate()]) }
+  const refreshData = async () => {
+    if (!demoMode) {
+      try {
+        await servicesApi.check()
+      } catch {
+        // Continue revalidation even if live check endpoint encounters network delay
+      }
+    }
+    await Promise.all([
+      servicesResource.mutate(),
+      incidentsResource.mutate(),
+      recoveriesResource.mutate(),
+      analyticsResource.mutate(),
+      healthResource.mutate(),
+      agentsResource.mutate(),
+    ])
+  }
 
   async function performApproval(id: string) {
     setBusyId(id)

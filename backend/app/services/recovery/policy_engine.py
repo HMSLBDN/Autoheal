@@ -15,8 +15,10 @@ from app.models.agent import InfrastructureAgent
 from app.models.recovery import RecoveryAction
 from app.models.service import RecoveryPolicy, Service
 from app.services.recovery.registry import APPROVED_RECOVERY_ACTIONS, is_action_allowed
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class PolicyEvaluationResult(BaseModel):
@@ -127,6 +129,9 @@ class RecoveryPolicyEngine:
         policy = pol_res.scalar_one_or_none()
 
         cooldown_seconds = policy.cooldown_seconds if policy else 900  # Default 15 minutes
+        if getattr(settings, "DEMO_MODE_ENABLED", False):
+            # In live demo mode, shorten cooldown to 10s so presenters can demonstrate repeatedly to judges
+            cooldown_seconds = min(cooldown_seconds, 10)
         max_retries = policy.max_retries if policy else 3
         approval_required = policy.approval_required if policy else True
 

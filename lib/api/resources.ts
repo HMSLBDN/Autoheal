@@ -109,10 +109,17 @@ function validateRecovery(value: unknown): RecoveryAction {
   const action = asObject<RecoveryAction>(value, 'recovery action', {
     strings: ['id', 'incidentId', 'serviceName', 'action', 'status', 'requestedBy', 'requestedAt', 'verification'],
     booleans: ['approvalRequired'],
+    nullableNumbers: ['durationSeconds'],
   })
   if (!['pending_approval', 'approved', 'running', 'completed', 'failed', 'rejected'].includes(action.status)) throw new ApiError('The recovery response contains an unsupported status.', 502)
   if (!['pending', 'passed', 'failed', 'not_started'].includes(action.verification)) throw new ApiError('The recovery response contains an unsupported verification state.', 502)
-  if (action.durationSeconds !== undefined && (typeof action.durationSeconds !== 'number' || !Number.isFinite(action.durationSeconds))) throw new ApiError('The recovery response contains an invalid duration.', 502)
+  if (
+    action.durationSeconds !== undefined &&
+    action.durationSeconds !== null &&
+    (typeof action.durationSeconds !== 'number' || !Number.isFinite(action.durationSeconds) || action.durationSeconds < 0)
+  ) {
+    throw new ApiError('The recovery response contains an invalid duration.', 502)
+  }
   if (action.executionMode !== undefined && !['SIMULATED', 'REAL'].includes(action.executionMode)) {
     throw new ApiError('The recovery response contains an unsupported execution mode.', 502)
   }
@@ -149,6 +156,9 @@ export const healthApi = {
 export const servicesApi = {
   async list(signal?: AbortSignal) {
     return asArray<Service>(await apiRequest<unknown>('/api/v1/services', { signal }), 'services', validateService)
+  },
+  async check(signal?: AbortSignal) {
+    return apiRequest<unknown>('/api/v1/services/check', { method: 'POST', signal })
   },
   async metrics(id: string, signal?: AbortSignal) {
     return validateMetrics(await apiRequest<unknown>(`/api/v1/services/${encodeURIComponent(id)}/metrics`, { signal }))

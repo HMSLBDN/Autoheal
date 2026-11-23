@@ -26,7 +26,39 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # Startup: Initialize runtime and log configuration
     logger.info("Initializing %s (version: %s, env: %s)...", settings.APP_NAME, settings.APP_VERSION, settings.APP_ENV)
+
+    # Optional background monitoring loop for live development and expo demonstrations
+    monitor_task = None
+    if settings.APP_ENV == "development" or getattr(settings, "DEMO_MODE_ENABLED", False):
+        import asyncio
+        from app.database import async_session_factory
+        from app.services.monitoring import MonitoringService
+
+        async def _background_monitoring_loop():
+            logger.info("AutoHeal real-time background monitoring loop started.")
+            while True:
+                try:
+                    await asyncio.sleep(5)
+                    async with async_session_factory() as session:
+                        mon_svc = MonitoringService()
+                        await mon_svc.run_monitoring_cycle(session)
+                except asyncio.CancelledError:
+                    break
+                except Exception as loop_err:
+                    logger.debug("Background monitoring cycle skipped: %s", loop_err)
+
+        monitor_task = asyncio.create_task(_background_monitoring_loop())
+
     yield
+
+    # Cancel background monitoring loop on shutdown
+    if monitor_task:
+        monitor_task.cancel()
+        try:
+            await monitor_task
+        except asyncio.CancelledError:
+            pass
+
     # Shutdown: Cleanly close background executors, Redis connections, DB pools
     logger.info("Gracefully terminating %s runtime...", settings.APP_NAME)
     try:

@@ -38,6 +38,16 @@ def format_recovery_response(rec: RecoveryAction) -> RecoveryActionResponse:
     # Format human-friendly requested_at string for frontend
     requested_at_str = rec.requested_at.strftime("%Y-%m-%d %H:%M UTC")
 
+    # Safely validate duration_seconds before returning API response
+    valid_duration: Optional[int] = None
+    if rec.duration_seconds is not None:
+        try:
+            parsed_duration = int(rec.duration_seconds)
+            if parsed_duration >= 0:
+                valid_duration = parsed_duration
+        except (ValueError, TypeError):
+            valid_duration = None
+
     return RecoveryActionResponse(
         id=rec.id,
         incident_id=rec.incident_id,
@@ -47,8 +57,10 @@ def format_recovery_response(rec: RecoveryAction) -> RecoveryActionResponse:
         approval_required=rec.approval_required,
         requested_by=rec.requested_by,
         requested_at=requested_at_str,
-        duration_seconds=rec.duration_seconds,
+        duration_seconds=valid_duration,
         verification=rec.verification,  # type: ignore[arg-type]
+        execution_mode=getattr(rec, "execution_mode", "SIMULATED"),
+        evidence_classification=getattr(rec, "evidence_classification", "SIMULATED"),
         result=result_data,
     )
 
